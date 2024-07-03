@@ -1,0 +1,43 @@
+type MAPLE = {Stage: String}
+type Data = Map[String, Int]
+type Assm = {var: String, min: Option[Int], max: Option[Int]}
+type Assms = List[Assm]
+
+in maple : Events[MAPLE]
+in knowledge : Events[Data]
+in ms : Events[Data]
+in assms : Events[Assms]
+
+liftable
+def concat[D](xs: List[D], ys: List[D]): List[D] = {
+    if List.isEmpty(ys) then xs
+    else concat(List.append(xs, List.head(ys)), List.tail(ys))
+}
+
+liftable
+def all(xs: List[Bool]): Bool =
+    List.fold(xs, true, Operators.and)
+
+liftable
+def eval_assm(assm : Assm, x: Data): Bool =
+    (
+        if isSome(assm.min) && Map.contains(x, assm.var)
+        then Option.getSome(assm.min) <= Map.get(x, assm.var)
+        else true
+    ) && (
+        if isSome(assm.max) && Map.contains(x, assm.var)
+        then Map.get(x, assm.var) <= Option.getSome(assm.max)
+        else true
+    )
+
+liftable
+def eval_assms(assms: List[Assm], x: Data): Bool =
+    all(List.map(assms, (assm: Assm) => eval_assm(assm, x)))
+
+liftable
+def eval_my_assm(y: Data): Bool ={
+    def assm: Assm = {var="X", min=Some(2), max=None}
+    eval_assm(assm, y)
+}
+
+out eval_assms(assms, ms) as assms_hold

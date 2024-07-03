@@ -1,0 +1,10 @@
+1: maple = {Stage = "M"}
+1: knowledge = Map("X" -> 1)
+1: assms = List({var="X", min=Some(2), max=Some(3)})
+1: ms = Map("X" -> 1)
+2: maple = {Stage = "A"}
+2: knowledge = Map("X" -> 2)
+2: ms = Map("X" -> 2)
+3: ms = Map("X" -> 3)
+4: ms = Map("X" -> 4)
+5: assms = List({var="X", min=Some(3), max=None})

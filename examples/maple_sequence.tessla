@@ -1,0 +1,56 @@
+type MAPLE = {Stage: String}
+type Data = Map[String, Int]
+type Assm = {var: String, min: Option[Int], max: Option[Int]}
+type Assms = List[Assm]
+
+in maple : Events[MAPLE]
+in knowledge : Events[Data]
+in ms : Events[Data]
+
+def maple_in_sequence =
+    (maple.Stage != "M"
+        || merge(last(maple.Stage == "E", maple), true)) &&
+    (maple.Stage != "A"
+        || merge(last(maple.Stage == "M", maple), true)) &&
+    (maple.Stage != "P"
+        || merge(last(maple.Stage == "A", maple), true)) &&
+    (maple.Stage != "L"
+        || merge(last(maple.Stage == "P", maple), true)) &&
+    (maple.Stage != "E"
+        || merge(last(maple.Stage == "L", maple), true))
+    
+# Note: these could be pulled out into macros with maple as a parameter,
+# but this would have to be done within a single macro since macros are
+# expanded at complile time so cannot be used to define mutually recursive
+# streams
+    
+def monitor =
+    maple.Stage == "M" && merge(last(execute, maple), true)
+
+def analyze =
+    maple.Stage == "A" && merge(last(monitor, maple), true)
+
+def plan =
+    maple.Stage == "P" && merge(last(analyze, maple), true)
+
+def legitimate =
+    maple.Stage == "L" && merge(last(plan, maple), true)
+
+def execute =
+    maple.Stage == "E" && merge(last(legitimate, maple), true)
+
+def maple_in_sequence2 =
+    merge(
+        (maple.Stage != "M" || monitor) &&
+        (maple.Stage != "A" || analyze) &&
+        (maple.Stage != "P" || plan) &&
+        (maple.Stage != "L" || legitimate) &&
+        (maple.Stage != "E" || execute),
+        true
+    )
+
+out maple_in_sequence
+out LTL.historically(maple_in_sequence)
+out maple_in_sequence#2
+out monitor
+out LTL.historically(maple_in_sequence) == maple_in_sequence2

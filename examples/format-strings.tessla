@@ -1,0 +1,117 @@
+in ints: Events[Int]
+in floats: Events[Float]
+in strings: Events[String]
+
+def ALL_CHARS1 = List.prepend("y",List.prepend("z", List.prepend("{",List.prepend("|", List.prepend("}", List.prepend("~", List.empty[String]))))))
+def ALL_CHARS2 = List.prepend("q", List.prepend("r", List.prepend("s", List.prepend("t", List.prepend("u", List.prepend("v",List.prepend("w",List.prepend("x", ALL_CHARS1))))))))
+def ALL_CHARS3 = List.prepend("h", List.prepend("i", List.prepend("j", List.prepend("k", List.prepend("l", List.prepend("m",List.prepend("n", List.prepend("o", List.prepend("p", ALL_CHARS2)))))))))
+def ALL_CHARS4 = List.prepend("`", List.prepend("a", List.prepend("b", List.prepend("c", List.prepend("d", List.prepend("e", List.prepend("f", List.prepend("g", ALL_CHARS3))))))))
+def ALL_CHARS5 = List.prepend("X", List.prepend("Y", List.prepend("Z", List.prepend("[", List.prepend("]", List.prepend("^", List.prepend("_", ALL_CHARS4)))))))
+def ALL_CHARS6 = List.prepend("Q", List.prepend("R", List.prepend("S", List.prepend("T", List.prepend("U", List.prepend("V", List.prepend("W", ALL_CHARS5)))))))
+def ALL_CHARS7 = List.prepend("I", List.prepend("J", List.prepend("K", List.prepend("L", List.prepend("M", List.prepend("N", List.prepend("O", List.prepend("P", ALL_CHARS6))))))))
+def ALL_CHARS8 = List.prepend("B", List.prepend("C", List.prepend("D", List.prepend("E", List.prepend("F", List.prepend("G", List.prepend("H", ALL_CHARS7)))))))
+def ALL_CHARS9 = List.prepend(";", List.prepend("<", List.prepend("=", List.prepend(">", List.prepend("?", List.prepend("@", List.prepend("A", ALL_CHARS8)))))))
+def ALL_CHARS10 = List.prepend("4", List.prepend("5", List.prepend("6", List.prepend("7", List.prepend("8", List.prepend("9", List.prepend(":", ALL_CHARS9)))))))
+def ALL_CHARS11 = List.prepend("-", List.prepend(".", List.prepend("/", List.prepend("0", List.prepend("1", List.prepend("2", List.prepend("3", ALL_CHARS10)))))))
+def ALL_CHARS12 = List.prepend("\\", List.prepend("'", List.prepend("(", List.prepend(")", List.prepend("*", List.prepend("+", List.prepend(",", ALL_CHARS11)))))))
+#def ALL_CHARS = List.prepend(" ", List.prepend("!", List.prepend("\"", List.prepend("#", List.prepend("\$", List.prepend("%", List.prepend("&", ALL_CHARS12)))))))
+
+def ALL_CHARS = List.prepend("A", List.prepend("B", List.prepend("C",  List.empty[String])))
+
+liftable
+def head_str(str: String): String =
+    f"$str%.1s"
+
+liftable
+def second_str(str: String): String = {
+    def str_first_one = f"$str%.1s"
+    def str_first_two = f"$str%.2s"
+    def char_matches = List.map(
+        ALL_CHARS,
+        ((c: String) => (f"$str_first_one$c" == str_first_two))
+    )
+    List.get(ALL_CHARS, List.find(char_matches, true))
+}
+
+def get_prefix(str: String, n: Int): String = {
+    def format_str = f"\%.${n}s"
+    if n > 0 
+    then String.format(format_str, str)
+    else ""
+}
+
+liftable
+def get_char(str: String, n: Int): Option[String] = {
+    def prefix_before_char = get_prefix(str, n)
+    def prefix_inc_char = get_prefix(str, n+1)
+
+    if n == 0
+    then Some(prefix_inc_char) 
+    else {
+        def char_matches = List.map(
+            ALL_CHARS,
+            ((c: String) => (f"$prefix_before_char$c" == prefix_inc_char))
+        )
+        def index = List.find(char_matches, true)
+        if index >= 0
+        then Some(List.get(ALL_CHARS, index))
+        else None
+    }
+
+}
+
+def strlen_rec(str: String, acc: strict Int): Int = {
+    if str == get_prefix(str, acc)
+    then acc
+    else if acc > 100
+    then -1
+    else strlen_rec(str, acc + 1)
+}
+
+liftable
+def strlen(str: String): Int = strlen_rec(str, 0)
+
+liftable
+def range(start: Int, end: Int): List[Int] = {
+    def range_rec(acc: List[Int], i: Int): List[Int] = {
+        if i > end
+        then acc
+        else range_rec(List.append(acc, i), i + 1)
+    }
+    range_rec(List.empty[Int], start)
+}
+
+liftable
+def str_to_char_list(str: String): List[String] = {
+    List.map(
+        range(0, strlen(str) - 1),
+        ((i: Int) => getSome(get_char(str, i)))
+    )
+}
+
+# def x: List[String] = "1234"
+
+#out get_prefix(strings, 1)
+#out get_prefix(strings, 0)
+#out get_prefix(strings, 2)
+#out get_char(strings, 0)
+#out get_char(strings, 1)
+#out get_char(strings, 2)
+#out get_prefix(strings, 0) == strings
+#out get_prefix(strings, 1) == strings
+#out get_prefix(strings, 2) == strings
+#out "A" == "AB"
+#out strings
+#out f"$strings%.2s"
+#out f"$strings%.2s" == strings
+out strlen("AB")
+out strlen(strings)
+#out get_prefix("A", 1)
+#out get_prefix("A", 1) == "A"
+#out get_prefix("A", 0) == "A"
+#out get_prefix("A", 2) == "A"
+out str_to_char_list(strings)
+#out f"${Set.empty[Int]}%8s" as x
+#out f"${head_str(strings)} ${second_str(strings)}" as y
+#out f"$ints%03d $ints%02x $ints%03o ${ints > 50}%-5s $ints" as z
+#out f"$floats%.8e $floats%011.6f $floats%.6a" as 💩

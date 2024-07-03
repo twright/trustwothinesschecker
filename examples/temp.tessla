@@ -1,0 +1,7 @@
+in temperature: Events[Int]
+
+def low = temperature < 3
+def high = temperature > 8
+def unsafe = low || high
+
+out unsafe

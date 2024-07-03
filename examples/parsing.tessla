@@ -1,0 +1,12 @@
+# Implementation of combinator parsers in Tessla
+
+type Parser[K] = ((String) => Optional[K])
+
+def add_action[K,L](action: (String, Optional[K]) => L,
+                    parser: Parser[K]) : Parser[L] =
+    (s: String) => action(x, parser(s))
+
+def whitespace(s: String): Unit:
+    if String.isEmpty(s):
+        Some ()
+    else if 
