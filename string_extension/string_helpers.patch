@@ -1,5 +1,5 @@
 diff --git a/core/src/main/scala/de/uni_luebeck/isp/tessla/core/RuntimeExterns.scala b/core/src/main/scala/de/uni_luebeck/isp/tessla/core/RuntimeExterns.scala
-index 60eb221f..019352c3 100644
+index 60eb221f..3c80c831 100644
 --- a/core/src/main/scala/de/uni_luebeck/isp/tessla/core/RuntimeExterns.scala
 +++ b/core/src/main/scala/de/uni_luebeck/isp/tessla/core/RuntimeExterns.scala
 @@ -285,6 +285,18 @@ object RuntimeExterns {
@@ -7,7 +7,7 @@ index 60eb221f..019352c3 100644
        (arguments(0).asInstanceOf[String] + arguments(1).asInstanceOf[String]).pure[A]
      }),
 +    "String_head" -> strict(propagate(_) { arguments =>
-+      (arguments(0).asInstanceOf[String].charAt(0)).pure[A]
++      (arguments(0).asInstanceOf[String].charAt(0).toString).pure[A]
 +    }),
 +    "String_tail" -> strict(propagate(_) { arguments =>
 +      (arguments(0).asInstanceOf[String].drop(1)).pure[A]
@@ -16,8 +16,68 @@ index 60eb221f..019352c3 100644
 +      (arguments(0).asInstanceOf[String].length()).pure[A]
 +    }),
 +    "String_toList" -> strict(propagate(_) { arguments =>
-+      (arguments(0).asInstanceOf[String].toList).pure[A]
++      (arguments(0).asInstanceOf[String].toList.map(_.toString)).pure[A]
 +    }),
      "toString" -> strict(propagate(_)(_(0).toString.pure[A])),
      "cast" -> strict(propagate(_)(_(0).pure[A])),
      "String_format" -> strict(propagate(_) { arguments =>
+diff --git a/tessla-compiler/src/main/resources/de/uni_luebeck/isp/tessla/rust/stdlib/src/value.rs b/tessla-compiler/src/main/resources/de/uni_luebeck/isp/tessla/rust/stdlib/src/value.rs
+index 2129571b..cefabb1a 100644
+--- a/tessla-compiler/src/main/resources/de/uni_luebeck/isp/tessla/rust/stdlib/src/value.rs
++++ b/tessla-compiler/src/main/resources/de/uni_luebeck/isp/tessla/rust/stdlib/src/value.rs
+@@ -580,6 +580,13 @@ impl TesslaString {
+         }
+     }
+ 
++    pub fn head(&self) -> TesslaString {
++        match (self){
++            Error(error) => Error(error),
++            Value(value) => Value(value.chars().next().map(|c| c.to_string()).unwrap_or_default()) // NOTE: No clue what I am doing
++        }
++    }
++
+     pub fn to_upper(&self) -> Self {
+         match self {
+             Error(error) => Error(error),
+diff --git a/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/RustNonStreamCodeGenerator.scala b/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/RustNonStreamCodeGenerator.scala
+index c2d1199c..434e85dd 100644
+--- a/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/RustNonStreamCodeGenerator.scala
++++ b/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/RustNonStreamCodeGenerator.scala
+@@ -611,6 +611,8 @@ class RustNonStreamCodeGenerator(extSpec: ExtendedSpecification)
+       case "__List_set__"     => s"${args(0)}.set(${args(1)}, ${args(2)})"
+       case "__List_fold__"    => s"${args(0)}.fold(${args(1)},${args(2)})"
+ 
++      case "__String_head__" => s"${args(0)}.head()"
++
+       case s if s.startsWith("__native:") => s"${s.stripPrefix("__native:").stripSuffix("__")}(${args.mkString(", ")})"
+ 
+       case _ => throw Diagnostics.CommandNotSupportedError(s"Unsupported built-in function for Rust backend: $name")
+diff --git a/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/preprocessing/InferGenericTypeTraits.scala b/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/preprocessing/InferGenericTypeTraits.scala
+index 45316ba2..110a5297 100644
+--- a/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/preprocessing/InferGenericTypeTraits.scala
++++ b/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/rustBackend/preprocessing/InferGenericTypeTraits.scala
+@@ -248,6 +248,8 @@ def InferGenericTypeTraits: TesslaPhase[ExtendedSpecification, ExtendedSpecifica
+ 
+         case "__error__" => Map.empty
+ 
++        case "__String_head__"      => Map.empty
++
+         case _ =>
+           throw Diagnostics.CommandNotSupportedError(
+             s"Encountered unknown built-in function trying to infer Rust traits: $name"
+diff --git a/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/scalaBackend/ScalaConstants.scala b/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/scalaBackend/ScalaConstants.scala
+index dbe4af66..f07ba59c 100644
+--- a/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/scalaBackend/ScalaConstants.scala
++++ b/tessla-compiler/src/main/scala/de/uni_luebeck/isp/tessla/tessla_compiler/backends/scalaBackend/ScalaConstants.scala
+@@ -216,6 +216,11 @@ object ScalaConstants {
+       case "__List_fold__" => s"${args(0)}.foldLeft[${typeTranslation(typeHint.argsTypes(1))}](${args(1)})(${args(2)})"
+       case "__List_map__"  => s"${args(0)}.map(${args(1)})"
+ 
++      case "__String_head__" => s"${args(0)}.charAt(0).toString"
++      case "__String_tail__" => s"${args(0)}.drop(1)"
++      case "__String_length__" => s"${args(0)}.length()"
++      case "__String_toList__" => s"${args(0)}.toList.map(_.toString)"
++
+       case "__getStruct__" =>
+         typeHint match {
+           case FunctionType(Seq(StructType(_, fieldNames), IntermediateCode.StringType), _) =>
