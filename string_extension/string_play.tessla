@@ -1,0 +1,16 @@
+in str: Events[String]
+
+liftable def head(str: String): String = extern("String_head")
+liftable def tail(str: String): String = extern("String_tail")
+liftable def length(str: String): Int = extern("String_length")
+liftable def toList(str: String): List[String] = extern("String_toList")
+
+def _head = head(str)
+def _tail = tail(str)
+def _length = length(str)
+def _toList = toList(str)
+
+out _head
+out _tail
+out _length
+out _toList
