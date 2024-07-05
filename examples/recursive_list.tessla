@@ -1,0 +1,79 @@
+# Contents of this file:
+# 1) Either implementation
+# 2) Implementation of symbolic natural number with List, e.g., Suc(Suc...Suc((Z)))
+# 3) Recursively defined List type: A symbolic representation that \st{utilizes} abuses the only recursive type in the language
+
+##### 1) Either implementation  #####
+type Either[L, R] := {isLeft : Bool, left : Option[L], right : Option[R]}
+def left[L, R](val : L) : Either[L, R] = {isLeft = true, left = Some(val), right = None}
+def right[L, R](val : R) : Either[L, R] = {isLeft = false, left = None, right = Some(val)}
+
+##### 2) Symbolic natural number with List #####
+type Nat = List[Unit]
+
+def natCtorImpl(N : Int, res : Nat) : Nat = {
+  if N == 0 then
+    res
+  else
+    natCtorImpl(N-1, List.append(res, ()))
+}
+
+def natCtor(N : Int) : Nat = {
+  natCtorImpl(N, List.empty())
+}
+
+###### 3) Recursively defined List type #####
+
+# Rules: None means ], Some(None) means [, Some(Some(val)) means val
+# NOTE: Final closing brackets are optional
+type RecursiveListEl[T] = Option[Option[T]]
+type RecursiveList[T] = List[RecursiveListEl[T]]
+
+def open_bracket[T]() : RecursiveListEl[T] = Some(None)
+def closed_bracket[T]() : RecursiveListEl[T] = None
+def value[T](val : T) : RecursiveListEl[T] = Some(Some(val))
+
+type RecursiveListElB = RecursiveListEl[Bool]
+type RecursiveListB = RecursiveList[Bool]
+def open_bracket_b(_ : Unit) = open_bracket[Bool]()
+def closed_bracket_b(_ : Unit) = closed_bracket[Bool]()
+def value_b(val : Bool) = value[Bool](val)
+
+# []
+def test0(_ : Unit) : RecursiveListB = List.empty()
+
+# [true, false]
+def test1(unused : Unit) : RecursiveListB = {
+  def l1 = List.append(List.empty(), value_b(true))
+  List.append(l1, value_b(false))
+}
+
+# [true, [true]]
+def test2(_ : Unit) : RecursiveListB = {
+  def l1 : RecursiveListB = List.append(List.empty, value_b(true))
+  def l2 : RecursiveListB = List.append(l1, open_bracket_b(()))
+  List.append(l2, value_b(true))
+}
+
+# [[], [true, [false]]]
+def test3(_ : Unit) : RecursiveListB = {
+  def l1 : RecursiveListB = List.append(List.empty(), open_bracket_b(()))
+  def l2 : RecursiveListB = List.append(l1, closed_bracket_b(()))
+  def l3 : RecursiveListB = List.append(l2, open_bracket_b(()))
+  def l4 : RecursiveListB = List.append(l3, value_b(true))
+  def l5 : RecursiveListB = List.append(l4, open_bracket_b(()))
+  List.append(l5, value_b(false))
+}
+
+#### Main:
+
+def y = left[Int, Unit](42)
+def z = right[Unit, Int](69)
+def w = natCtor(0)
+def v = test3(())
+
+
+out y
+out z
+out w
+out v
