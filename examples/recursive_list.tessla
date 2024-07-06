@@ -29,14 +29,14 @@ def natCtor(N : Int) : Nat = {
 type RecursiveListEl[T] = Option[Option[T]]
 type RecursiveList[T] = List[RecursiveListEl[T]]
 
-def open_bracket[T]() : RecursiveListEl[T] = Some(None)
-def closed_bracket[T]() : RecursiveListEl[T] = None
+def open_bracket[T] : RecursiveListEl[T] = Some(None)
+def closed_bracket[T] : RecursiveListEl[T] = None
 def value[T](val : T) : RecursiveListEl[T] = Some(Some(val))
 
 type RecursiveListElB = RecursiveListEl[Bool]
 type RecursiveListB = RecursiveList[Bool]
-def open_bracket_b(_ : Unit) = open_bracket[Bool]()
-def closed_bracket_b(_ : Unit) = closed_bracket[Bool]()
+def open_bracket_b = open_bracket[Bool]
+def closed_bracket_b = closed_bracket[Bool]
 def value_b(val : Bool) = value[Bool](val)
 
 # []
@@ -51,17 +51,17 @@ def test1(unused : Unit) : RecursiveListB = {
 # [true, [true]]
 def test2(_ : Unit) : RecursiveListB = {
   def l1 : RecursiveListB = List.append(List.empty, value_b(true))
-  def l2 : RecursiveListB = List.append(l1, open_bracket_b(()))
+  def l2 : RecursiveListB = List.append(l1, open_bracket_b)
   List.append(l2, value_b(true))
 }
 
 # [[], [true, [false]]]
 def test3(_ : Unit) : RecursiveListB = {
-  def l1 : RecursiveListB = List.append(List.empty(), open_bracket_b(()))
-  def l2 : RecursiveListB = List.append(l1, closed_bracket_b(()))
-  def l3 : RecursiveListB = List.append(l2, open_bracket_b(()))
+  def l1 : RecursiveListB = List.append(List.empty(), open_bracket_b)
+  def l2 : RecursiveListB = List.append(l1, closed_bracket_b)
+  def l3 : RecursiveListB = List.append(l2, open_bracket_b)
   def l4 : RecursiveListB = List.append(l3, value_b(true))
-  def l5 : RecursiveListB = List.append(l4, open_bracket_b(()))
+  def l5 : RecursiveListB = List.append(l4, open_bracket_b)
   List.append(l5, value_b(false))
 }
 
