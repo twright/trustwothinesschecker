@@ -108,16 +108,28 @@ def test4 : RecursiveListB = {
   List.append(l4, value_b(false))
 }
 
+# [[[[[[[[[[]]]]]]]]]]
+def test5 : RecursiveListB = {
+  List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.empty(), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b)
+}
 
 #### Main:
 
 def y = left[Int, Unit](42)
 def z = right[Unit, Int](69)
 def w = natCtor(0)
-def v = serialize_recursive_list_b(test4)
+
+def serialize_test0 = serialize_recursive_list_b(test0) == "[]"
+def serialize_test1 = serialize_recursive_list_b(test1) == "[true, false]"
+def serialize_test2 = serialize_recursive_list_b(test2) == "[true, [true]]"
+def serialize_test3 = serialize_recursive_list_b(test3) == "[[], [true, [false]]]"
+def serialize_test4 = serialize_recursive_list_b(test4) == "[[true], [false]]"
+def serialize_test5 = serialize_recursive_list_b(test5) == "[[[[[[[[[[]]]]]]]]]]"
+
+def all_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5
 
 
 out y
 out z
 out w
-out v
+out all_tests_passed
