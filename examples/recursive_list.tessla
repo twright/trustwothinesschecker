@@ -74,23 +74,23 @@ def serialize_recursive_list_b(list : RecursiveListB) : String = {
 
 
 # []
-def test0(_ : Unit) : RecursiveListB = List.empty()
+def test0 : RecursiveListB = List.empty()
 
 # [true, false]
-def test1(unused : Unit) : RecursiveListB = {
+def test1 : RecursiveListB = {
   def l1 = List.append(List.empty(), value_b(true))
   List.append(l1, value_b(false))
 }
 
 # [true, [true]]
-def test2(_ : Unit) : RecursiveListB = {
+def test2 : RecursiveListB = {
   def l1 = List.append(List.empty, value_b(true))
   def l2 = List.append(l1, open_bracket_b)
   List.append(l2, value_b(true))
 }
 
 # [[], [true, [false]]]
-def test3(_ : Unit) : RecursiveListB = {
+def test3 : RecursiveListB = {
   def l1 = List.append(List.empty(), open_bracket_b)
   def l2 = List.append(l1, closed_bracket_b)
   def l3 = List.append(l2, open_bracket_b)
@@ -100,7 +100,7 @@ def test3(_ : Unit) : RecursiveListB = {
 }
 
 # [[true], [false]]
-def test4(_ : Unit) : RecursiveListB = {
+def test4 : RecursiveListB = {
   def l1 = List.append(List.empty(), open_bracket_b)
   def l2 = List.append(l1, value_b(true))
   def l3 = List.append(l2, closed_bracket_b)
@@ -108,21 +108,13 @@ def test4(_ : Unit) : RecursiveListB = {
   List.append(l4, value_b(false))
 }
 
-# [[], [true, []], []]
-def test4(_ : Unit) : RecursiveListB = {
-  def l1 = List.append(List.empty(), open_bracket_b)
-  def l2 = List.append(l1, value_b(true))
-  def l3 = List.append(l2, closed_bracket_b)
-  def l4 = List.append(l3, open_bracket_b)
-  List.append(l4, value_b(false))
-}
 
 #### Main:
 
 def y = left[Int, Unit](42)
 def z = right[Unit, Int](69)
 def w = natCtor(0)
-def v = serialize_recursive_list_b(test4(()))
+def v = serialize_recursive_list_b(test4)
 
 
 out y
