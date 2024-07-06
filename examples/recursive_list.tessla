@@ -38,6 +38,40 @@ type RecursiveListB = RecursiveList[Bool]
 def open_bracket_b = open_bracket[Bool]
 def closed_bracket_b = closed_bracket[Bool]
 def value_b(val : Bool) = value[Bool](val)
+def get_list_el_b(val : RecursiveListElB) = getSome(getSome(val))
+
+def serialize_recursive_list_b_impl_body(list : RecursiveListB, res : String, nest_level : Int) : String = {
+  def h = List.head(list)
+  def t = List.tail(list)
+    if h == open_bracket_b then
+      serialize_recursive_list_b_impl(List.tail(list), String.concat(res, "["), nest_level + 1)
+    else if h == closed_bracket_b then
+      serialize_recursive_list_b_impl(List.tail(list), String.concat(res, "], "), nest_level - 1)
+    else
+      if (List.size(list) == 1) || (List.head(t) == closed_bracket_b) then
+        serialize_recursive_list_b_impl(List.tail(list), String.concat(res, String.format("%s", get_list_el_b(h))), nest_level)
+      else
+        serialize_recursive_list_b_impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el_b(h)), ", ")), nest_level)
+}
+
+def serialize_recursive_list_b_impl_close_brackets(res : String, nest_level : Int) : String = {
+  if nest_level == 1 then
+    String.concat(res, "]")
+  else
+    serialize_recursive_list_b_impl_close_brackets(String.concat(res, "]"), nest_level - 1)
+}
+
+def serialize_recursive_list_b_impl(list : RecursiveListB, res : String, nest_level : Int) : String = {
+  if List.isEmpty(list) then
+    serialize_recursive_list_b_impl_close_brackets(res, nest_level)
+  else
+    serialize_recursive_list_b_impl_body(list, res, nest_level)
+}
+
+def serialize_recursive_list_b(list : RecursiveListB) : String = {
+  serialize_recursive_list_b_impl(list, "[", 1)
+}
+
 
 # []
 def test0(_ : Unit) : RecursiveListB = List.empty()
@@ -50,19 +84,37 @@ def test1(unused : Unit) : RecursiveListB = {
 
 # [true, [true]]
 def test2(_ : Unit) : RecursiveListB = {
-  def l1 : RecursiveListB = List.append(List.empty, value_b(true))
-  def l2 : RecursiveListB = List.append(l1, open_bracket_b)
+  def l1 = List.append(List.empty, value_b(true))
+  def l2 = List.append(l1, open_bracket_b)
   List.append(l2, value_b(true))
 }
 
 # [[], [true, [false]]]
 def test3(_ : Unit) : RecursiveListB = {
-  def l1 : RecursiveListB = List.append(List.empty(), open_bracket_b)
-  def l2 : RecursiveListB = List.append(l1, closed_bracket_b)
-  def l3 : RecursiveListB = List.append(l2, open_bracket_b)
-  def l4 : RecursiveListB = List.append(l3, value_b(true))
-  def l5 : RecursiveListB = List.append(l4, open_bracket_b)
+  def l1 = List.append(List.empty(), open_bracket_b)
+  def l2 = List.append(l1, closed_bracket_b)
+  def l3 = List.append(l2, open_bracket_b)
+  def l4 = List.append(l3, value_b(true))
+  def l5 = List.append(l4, open_bracket_b)
   List.append(l5, value_b(false))
+}
+
+# [[true], [false]]
+def test4(_ : Unit) : RecursiveListB = {
+  def l1 = List.append(List.empty(), open_bracket_b)
+  def l2 = List.append(l1, value_b(true))
+  def l3 = List.append(l2, closed_bracket_b)
+  def l4 = List.append(l3, open_bracket_b)
+  List.append(l4, value_b(false))
+}
+
+# [[], [true, []], []]
+def test4(_ : Unit) : RecursiveListB = {
+  def l1 = List.append(List.empty(), open_bracket_b)
+  def l2 = List.append(l1, value_b(true))
+  def l3 = List.append(l2, closed_bracket_b)
+  def l4 = List.append(l3, open_bracket_b)
+  List.append(l4, value_b(false))
 }
 
 #### Main:
@@ -70,7 +122,7 @@ def test3(_ : Unit) : RecursiveListB = {
 def y = left[Int, Unit](42)
 def z = right[Unit, Int](69)
 def w = natCtor(0)
-def v = test3(())
+def v = serialize_recursive_list_b(test4(()))
 
 
 out y
