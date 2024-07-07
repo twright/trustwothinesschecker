@@ -35,6 +35,7 @@ def value[T](val : T) : RecursiveListEl[T] = Some(Some(val))
 
 type RecursiveListElB = RecursiveListEl[Bool]
 type RecursiveListB = RecursiveList[Bool]
+type ZRecursiveListElB = (Int, RecursiveListElB)
 def open_bracket_b = open_bracket[Bool]
 def closed_bracket_b = closed_bracket[Bool]
 def value_b(val : Bool) = value[Bool](val)
@@ -70,6 +71,52 @@ def serialize_recursive_list_b_impl(list : RecursiveListB, res : String, nest_le
 
 def serialize_recursive_list_b(list : RecursiveListB) : String = {
   serialize_recursive_list_b_impl(list, "[", 1)
+}
+
+# def remove_nested_lists_impl_body(list : RecursiveListB, remove : Bool) : RecursiveListB = {
+#   def h = List.head(list)
+#   def removing = remove_nested_lists_impl(List.tail(list), true)
+#   def not_removing = remove_nested_lists_impl(List.tail(list), false)
+
+#   if remove then # In removing state
+#     if h == closed_bracket_b then
+#       not_removing # Stop removing
+#     else
+#       removing # Keep removing
+#   else
+#     if h == open_bracket_b then
+#       removing # Start removing
+#     else
+#       List.append(not_removing) # Add element, keep not removing
+# }
+
+# def remove_nested_lists_impl(list : RecursiveListB, rem : RecursiveListB, remove : Bool) : RecursiveListB = {
+#   # Instead of this crap, make a function that returns unit if we are skipping the element and value if we keep it.
+
+#   if List.isEmpty(list) then
+#     list
+#   else
+#     List.append(list, remove_nested_lists_impl_body(rem, remove))
+# }
+
+
+def list_filter_impl[T](list : List[T], func : (T) => Bool, acc : List[T]) : List[T] = {
+  if List.isEmpty(list) then
+    acc
+  else
+    if func(List.head(list)) then
+      list_filter_impl(List.tail(list), func, List.append(acc, List.head(list)))
+    else
+      list_filter_impl(List.tail(list), func, acc)
+}
+
+def list_filter[T](list : List[T], func : (T) => Bool) : List[T] = {
+  list_filter_impl(list, func, List.empty())
+}
+
+def list_find_all[T](list : List[T], val : T) : List[(Int, T)] = {
+  def with_idxs = List.zipWithIndex(list)
+  list_filter[(Int, T)](with_idxs, (el) => el._2 == val)
 }
 
 
@@ -133,3 +180,4 @@ out y
 out z
 out w
 out all_tests_passed
+out list_find_all[RecursiveListElB](test3, open_bracket_b) as tmp
