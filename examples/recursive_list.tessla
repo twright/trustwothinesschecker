@@ -26,54 +26,54 @@ def natCtor(N : Int) : Nat = {
 
 # Rules: None means ], Some(None) means [, Some(Some(val)) means val
 # NOTE: Final closing brackets are optional
-type RecursiveListEl[T] = Option[Option[T]]
-type RecursiveList[T] = List[RecursiveListEl[T]]
+type RListEl[T] = Option[Option[T]]
+type RList[T] = List[RListEl[T]]
 
-def open_bracket[T] : RecursiveListEl[T] = Some(None)
-def closed_bracket[T] : RecursiveListEl[T] = None
-def value[T](val : T) : RecursiveListEl[T] = Some(Some(val))
+def open_bracket[T] : RListEl[T] = Some(None)
+def closed_bracket[T] : RListEl[T] = None
+def value[T](val : T) : RListEl[T] = Some(Some(val))
 
-type RecursiveListElB = RecursiveListEl[Bool]
-type RecursiveListB = RecursiveList[Bool]
-type ZRecursiveListElB = (Int, RecursiveListElB)
+type RListElB = RListEl[Bool]
+type RListB = RList[Bool]
+type ZRListElB = (Int, RListElB)
 def open_bracket_b = open_bracket[Bool]
 def closed_bracket_b = closed_bracket[Bool]
 def value_b(val : Bool) = value[Bool](val)
-def get_list_el_b(val : RecursiveListElB) = getSome(getSome(val))
+def get_list_el_b(val : RListElB) = getSome(getSome(val))
 
-def serialize_recursive_list_b_impl_body(list : RecursiveListB, res : String, nest_level : Int) : String = {
+def serialize_rlist_b_impl_body(list : RListB, res : String, nest_level : Int) : String = {
   def h = List.head(list)
   def t = List.tail(list)
     if h == open_bracket_b then
-      serialize_recursive_list_b_impl(List.tail(list), String.concat(res, "["), nest_level + 1)
+      serialize_rlist_b_impl(List.tail(list), String.concat(res, "["), nest_level + 1)
     else if h == closed_bracket_b then
-      serialize_recursive_list_b_impl(List.tail(list), String.concat(res, "], "), nest_level - 1)
+      serialize_rlist_b_impl(List.tail(list), String.concat(res, "], "), nest_level - 1)
     else
       if (List.size(list) == 1) || (List.head(t) == closed_bracket_b) then
-        serialize_recursive_list_b_impl(List.tail(list), String.concat(res, String.format("%s", get_list_el_b(h))), nest_level)
+        serialize_rlist_b_impl(List.tail(list), String.concat(res, String.format("%s", get_list_el_b(h))), nest_level)
       else
-        serialize_recursive_list_b_impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el_b(h)), ", ")), nest_level)
+        serialize_rlist_b_impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el_b(h)), ", ")), nest_level)
 }
 
-def serialize_recursive_list_b_impl_close_brackets(res : String, nest_level : Int) : String = {
+def serialize_rlist_b_impl_close_brackets(res : String, nest_level : Int) : String = {
   if nest_level == 1 then
     String.concat(res, "]")
   else
-    serialize_recursive_list_b_impl_close_brackets(String.concat(res, "]"), nest_level - 1)
+    serialize_rlist_b_impl_close_brackets(String.concat(res, "]"), nest_level - 1)
 }
 
-def serialize_recursive_list_b_impl(list : RecursiveListB, res : String, nest_level : Int) : String = {
+def serialize_rlist_b_impl(list : RListB, res : String, nest_level : Int) : String = {
   if List.isEmpty(list) then
-    serialize_recursive_list_b_impl_close_brackets(res, nest_level)
+    serialize_rlist_b_impl_close_brackets(res, nest_level)
   else
-    serialize_recursive_list_b_impl_body(list, res, nest_level)
+    serialize_rlist_b_impl_body(list, res, nest_level)
 }
 
-def serialize_recursive_list_b(list : RecursiveListB) : String = {
-  serialize_recursive_list_b_impl(list, "[", 1)
+def serialize_rlist_b(list : RListB) : String = {
+  serialize_rlist_b_impl(list, "[", 1)
 }
 
-# def remove_nested_lists_impl_body(list : RecursiveListB, remove : Bool) : RecursiveListB = {
+# def remove_nested_lists_impl_body(list : RListB, remove : Bool) : RListB = {
 #   def h = List.head(list)
 #   def removing = remove_nested_lists_impl(List.tail(list), true)
 #   def not_removing = remove_nested_lists_impl(List.tail(list), false)
@@ -90,7 +90,7 @@ def serialize_recursive_list_b(list : RecursiveListB) : String = {
 #       List.append(not_removing) # Add element, keep not removing
 # }
 
-# def remove_nested_lists_impl(list : RecursiveListB, rem : RecursiveListB, remove : Bool) : RecursiveListB = {
+# def remove_nested_lists_impl(list : RListB, rem : RListB, remove : Bool) : RListB = {
 #   # Instead of this crap, make a function that returns unit if we are skipping the element and value if we keep it.
 
 #   if List.isEmpty(list) then
@@ -121,23 +121,23 @@ def list_find_all[T](list : List[T], val : T) : List[(Int, T)] = {
 
 
 # []
-def test0 : RecursiveListB = List.empty()
+def test0 : RListB = List.empty()
 
 # [true, false]
-def test1 : RecursiveListB = {
+def test1 : RListB = {
   def l1 = List.append(List.empty(), value_b(true))
   List.append(l1, value_b(false))
 }
 
 # [true, [true]]
-def test2 : RecursiveListB = {
+def test2 : RListB = {
   def l1 = List.append(List.empty, value_b(true))
   def l2 = List.append(l1, open_bracket_b)
   List.append(l2, value_b(true))
 }
 
 # [[], [true, [false]]]
-def test3 : RecursiveListB = {
+def test3 : RListB = {
   def l1 = List.append(List.empty(), open_bracket_b)
   def l2 = List.append(l1, closed_bracket_b)
   def l3 = List.append(l2, open_bracket_b)
@@ -147,7 +147,7 @@ def test3 : RecursiveListB = {
 }
 
 # [[true], [false]]
-def test4 : RecursiveListB = {
+def test4 : RListB = {
   def l1 = List.append(List.empty(), open_bracket_b)
   def l2 = List.append(l1, value_b(true))
   def l3 = List.append(l2, closed_bracket_b)
@@ -156,7 +156,7 @@ def test4 : RecursiveListB = {
 }
 
 # [[[[[[[[[[]]]]]]]]]]
-def test5 : RecursiveListB = {
+def test5 : RListB = {
   List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.empty(), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b)
 }
 
@@ -166,12 +166,12 @@ def y = left[Int, Unit](42)
 def z = right[Unit, Int](69)
 def w = natCtor(0)
 
-def serialize_test0 = serialize_recursive_list_b(test0) == "[]"
-def serialize_test1 = serialize_recursive_list_b(test1) == "[true, false]"
-def serialize_test2 = serialize_recursive_list_b(test2) == "[true, [true]]"
-def serialize_test3 = serialize_recursive_list_b(test3) == "[[], [true, [false]]]"
-def serialize_test4 = serialize_recursive_list_b(test4) == "[[true], [false]]"
-def serialize_test5 = serialize_recursive_list_b(test5) == "[[[[[[[[[[]]]]]]]]]]"
+def serialize_test0 = serialize_rlist_b(test0) == "[]"
+def serialize_test1 = serialize_rlist_b(test1) == "[true, false]"
+def serialize_test2 = serialize_rlist_b(test2) == "[true, [true]]"
+def serialize_test3 = serialize_rlist_b(test3) == "[[], [true, [false]]]"
+def serialize_test4 = serialize_rlist_b(test4) == "[[true], [false]]"
+def serialize_test5 = serialize_rlist_b(test5) == "[[[[[[[[[[]]]]]]]]]]"
 
 def all_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5
 
@@ -180,4 +180,4 @@ out y
 out z
 out w
 out all_tests_passed
-out list_find_all[RecursiveListElB](test3, open_bracket_b) as tmp
+out list_find_all[RListElB](test3, open_bracket_b) as tmp
