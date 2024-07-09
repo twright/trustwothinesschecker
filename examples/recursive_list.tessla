@@ -120,6 +120,68 @@ def list_find_all[T](list : List[T], val : T) : List[(Int, T)] = {
 }
 
 
+def list_pad[T](list : List[T], val : T, N : Int) : List[T] = {
+  if N <= 0 then
+    list
+  else
+    list_pad(List.append(list, val), val, N-1)
+}
+
+
+def forall[T](el : T, funcs : List[(T) => Bool]) : Bool = {
+  if List.isEmpty(funcs) then
+    true
+  else
+    List.head(funcs)(el) && forall(el, List.tail(funcs))
+}
+
+def merge_ranges_impl_body(ranges : List[(Int, Int)], acc : List[(Int, Int)]) : List[(Int, Int)] = {
+  def h = List.head(ranges)
+  def t = List.tail(ranges)
+  def hh = List.head(t)
+  if h._2 >= hh._2 then
+    merge_ranges_impl(List.prepend(h, List.tail(t)), acc) # Remove hh from list and keep going with h
+  else
+    merge_ranges_impl(t, List.append(acc, h)) # Keep recursing from next element (append h to acc)
+}
+
+def merge_ranges_impl(ranges : List[(Int, Int)], acc : List[(Int, Int)]) : List[(Int, Int)] = {
+  if List.isEmpty(ranges) then ranges
+  else if List.size(ranges) == 1 then
+    List.append(acc, List.head(ranges)) # Add the final range and return
+  else
+    merge_ranges_impl_body(ranges, acc)
+}
+
+# Assumes they are sorted
+def merge_ranges(ranges : List[(Int, Int)]) : List[(Int, Int)] = {
+  merge_ranges_impl(ranges, List.empty())
+}
+
+def rlist_size_b(list : RListB)  = {
+  def open_bracket_idxs = List.map(list_find_all(list, open_bracket_b), (pair) => pair._1) # Find open brackets and return only idxs
+  def closed_bracket_explicit_idxs = List.map(list_find_all(list, closed_bracket_b), (pair) => pair._1) # Find explicitly closed brackets and return only idxs
+
+  def closed_bracket_idxs =
+    if List.size(open_bracket_idxs) > List.size(closed_bracket_explicit_idxs) then
+      list_pad(closed_bracket_explicit_idxs, List.size(list), List.size(open_bracket_idxs) - List.size(closed_bracket_explicit_idxs)) # Pad it with closed bracket
+    else
+      closed_bracket_explicit_idxs
+
+  def bracket_ranges_full = List.zip(open_bracket_idxs, closed_bracket_idxs) # Might contain overlapping
+  def bracket_ranges = merge_ranges(bracket_ranges_full)
+
+  def with_idxs = List.zipWithIndex(list)
+
+  def between_inclusive(min : Int, max : Int, el : ZRListElB) : Bool = el._1 >= min && el._1 <= max
+  def not_between_range(range : (Int, Int)) : (ZRListElB) => Bool = ((el) => !between_inclusive(range._1, range._2, el))
+  def interval_funcs = List.map(bracket_ranges, not_between_range)
+  def not_between_intervals(el : ZRListElB) = forall(el, interval_funcs)
+  def non_nested_els = list_filter(with_idxs, not_between_intervals)
+
+  List.size(non_nested_els) + List.size(bracket_ranges)
+}
+
 # []
 def test0 : RListB = List.empty()
 
@@ -173,11 +235,20 @@ def serialize_test3 = serialize_rlist_b(test3) == "[[], [true, [false]]]"
 def serialize_test4 = serialize_rlist_b(test4) == "[[true], [false]]"
 def serialize_test5 = serialize_rlist_b(test5) == "[[[[[[[[[[]]]]]]]]]]"
 
-def all_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5
+def size_test0 = rlist_size_b(test0) == 0
+def size_test1 = rlist_size_b(test1) == 2
+def size_test2 = rlist_size_b(test2) == 2
+def size_test3 = rlist_size_b(test3) == 2
+def size_test4 = rlist_size_b(test4) == 2
+def size_test5 = rlist_size_b(test5) == 1
+
+
+def all_serialize_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5
+def all_size_tests_passed = size_test0 && size_test1 && size_test2 && size_test3 && size_test4 && size_test5
 
 
 out y
 out z
 out w
-out all_tests_passed
-out list_find_all[RListElB](test3, open_bracket_b) as tmp
+out all_serialize_tests_passed
+out all_size_tests_passed
