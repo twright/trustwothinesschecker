@@ -24,17 +24,21 @@ def natCtor(N : Int) : Nat = {
 
 ###### 3) Recursively defined List type #####
 
+def list1[T](el : T) = List.append(List.empty(), el)
+
 # Rules: None means ], Some(None) means [, Some(Some(val)) means val
 # NOTE: Final closing brackets are optional
 type RListEl[T] = Option[Option[T]]
 type RList[T] = List[RListEl[T]]
-
+# Unfortunately, need this in order to differentiate between head([true]) and head([[true]])
+type RListHead[T] = {val : RList[T], isList : Bool}
 def open_bracket[T] : RListEl[T] = Some(None)
 def closed_bracket[T] : RListEl[T] = None
 def value[T](val : T) : RListEl[T] = Some(Some(val))
 
 type RListElB = RListEl[Bool]
 type RListB = RList[Bool]
+type RListHeadB = RListHead[Bool]
 type ZRListElB = (Int, RListElB)
 def open_bracket_b = open_bracket[Bool]
 def closed_bracket_b = closed_bracket[Bool]
@@ -156,6 +160,50 @@ def rlist_size_b(list : RListB)  = {
   List.size(non_nested_els) + List.size(bracket_ranges)
 }
 
+# NOTE: Just like with normal head, running it on an empty list gives runtime error
+def rlist_head(list : RListB) : RListHeadB = {
+  def impl(list : RListB, acc : RListB, indent_level : Int) : RListB = {
+
+    # Logic when we have no indent
+    def body_no_indent(list : RListB, acc : RListB, indent_level : Int) : RListB = {
+        def h = List.head(list)
+        def t = List.tail(list)
+        if h == open_bracket_b then
+          impl(t, acc, indent_level + 1) # First indent means not adding the open bracket as it is built-in
+        else
+          List.append(acc, h)
+    }
+
+    # Logic when we have an indent
+    def body_indent(list : RListB, acc : RListB, indent_level : Int) : RListB = {
+        def h = List.head(list)
+        def t = List.tail(list)
+        if h == open_bracket_b then
+          impl(t, List.append(acc, h), indent_level + 1)
+        else if h == closed_bracket_b then
+          if indent_level == 1 then # If this is final closed bracket
+            acc
+          else
+            impl(t, List.append(acc, h), indent_level - 1)
+        else
+          impl(t, List.append(acc, h), indent_level)
+    }
+
+    if List.isEmpty(list) then
+      acc
+    else
+      if indent_level == 0 then
+        body_no_indent(list, acc, indent_level)
+      else
+        body_indent(list, acc, indent_level)
+  }
+
+  if List.head(list) == open_bracket_b then
+    {val = impl(List.tail(list), List.empty(), 1), isList = true}
+  else
+    {val = list1(List.head(list)), isList = false}
+}
+
 # []
 def test0 : RListB = List.empty()
 
@@ -216,13 +264,20 @@ def size_test3 = rlist_size_b(test3) == 2
 def size_test4 = rlist_size_b(test4) == 2
 def size_test5 = rlist_size_b(test5) == 1
 
+# def head_test0 = rlist_head(test0) # Runtime error
+def head_test1 = rlist_head(test1) == {isList = false, val = list1(Some(Some(true)))}
+def head_test2 = rlist_head(test2) == {isList = false, val = list1(Some(Some(true)))}
+def head_test3 = rlist_head(test3) == {isList = true, val = List.empty()}
+def head_test4 = rlist_head(test4) == {isList = true, val = list1(Some(Some(true)))}
+def head_test5 = rlist_head(test5) == {isList = true, val = List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.empty(), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b)}
 
 def all_serialize_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5
 def all_size_tests_passed = size_test0 && size_test1 && size_test2 && size_test3 && size_test4 && size_test5
-
+def all_head_tests_passed = head_test1 && head_test2 && head_test3 && head_test4 && head_test5
 
 out y
 out z
 out w
 out all_serialize_tests_passed
 out all_size_tests_passed
+out all_head_tests_passed
