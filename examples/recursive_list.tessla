@@ -80,8 +80,6 @@ def rlist_serialize(list : RListB) : String = {
         impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el_b(h)), maybe_comma_space(t))), nest_level)
     }
 
-
-
     if List.isEmpty(list) then
       close_final_brackets(res, nest_level)
     else
@@ -195,21 +193,21 @@ def test_cases_and_empty = List.prepend(test0, test_cases)
 def serialize_exp_results = List.prepend("[]", list8("[true, false]", "[true, [true]]", "[[], [true, [false]]]", "[[true], [false]]", "[[[[[[[[[[]]]]]]]]]]", "[true, false, false]", "[[[]], false]", "[[[], true], false]"))
 def size_exp_results = List.prepend(0, list8(2, 2, 2, 2, 1, 3, 2, 2))
 def head_exp_results = list8( {isList = false, val = list1(value_b(true))},
-                          {isList = false, val = list1(value_b(true))},
-                          {isList = true, val = List.empty()},
-                          {isList = true, val = list1(value_b(true))},
-                          {isList = true, val = List.tail(test5)},
-                          {isList = false, val = list1(value_b(true))},
-                          {isList = true, val = list2(open_bracket_b, closed_bracket_b)},
-                          {isList = true, val = list3(open_bracket_b, closed_bracket_b, value_b((true)))})
+                              {isList = false, val = list1(value_b(true))},
+                              {isList = true, val = List.empty()},
+                              {isList = true, val = list1(value_b(true))},
+                              {isList = true, val = List.tail(test5)},
+                              {isList = false, val = list1(value_b(true))},
+                              {isList = true, val = list2(open_bracket_b, closed_bracket_b)},
+                              {isList = true, val = list3(open_bracket_b, closed_bracket_b, value_b((true)))})
 def tail_exp_results = list8( list1(value_b(false)),
-                          list2(open_bracket_b, value_b(true)),
-                          list4(open_bracket_b, value_b(true), open_bracket_b, value_b(false)),
-                          list2(open_bracket_b, value_b(false)),
-                          List.empty(),
-                          list2(value_b(false), value_b(false)),
-                          list1(value_b(false)),
-                          list1(value_b(false)))
+                              list2(open_bracket_b, value_b(true)),
+                              list4(open_bracket_b, value_b(true), open_bracket_b, value_b(false)),
+                              list2(open_bracket_b, value_b(false)),
+                              List.empty(),
+                              list2(value_b(false), value_b(false)),
+                              list1(value_b(false)),
+                              list1(value_b(false)))
 
 def evaluate_tests[T1, T2](test_cases : List[T1], exp_results : List[T2], func : (T1) => T2) : List[Bool] = {
   List.map(
