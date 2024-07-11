@@ -83,64 +83,6 @@ def serialize_rlist_b(list : RListB) : String = {
 }
 
 
-def list_filter_impl[T](list : List[T], func : (T) => Bool, acc : List[T]) : List[T] = {
-  if List.isEmpty(list) then
-    acc
-  else
-    if func(List.head(list)) then
-      list_filter_impl(List.tail(list), func, List.append(acc, List.head(list)))
-    else
-      list_filter_impl(List.tail(list), func, acc)
-}
-
-def list_filter[T](list : List[T], func : (T) => Bool) : List[T] = {
-  list_filter_impl(list, func, List.empty())
-}
-
-def list_find_all[T](list : List[T], val : T) : List[(Int, T)] = {
-  def with_idxs = List.zipWithIndex(list)
-  list_filter[(Int, T)](with_idxs, (el) => el._2 == val)
-}
-
-
-def list_pad[T](list : List[T], val : T, N : Int) : List[T] = {
-  if N <= 0 then
-    list
-  else
-    list_pad(List.append(list, val), val, N-1)
-}
-
-
-def forall[T](el : T, funcs : List[(T) => Bool]) : Bool = {
-  if List.isEmpty(funcs) then
-    true
-  else
-    List.head(funcs)(el) && forall(el, List.tail(funcs))
-}
-
-def merge_ranges_impl_body(ranges : List[(Int, Int)], acc : List[(Int, Int)]) : List[(Int, Int)] = {
-  def h = List.head(ranges)
-  def t = List.tail(ranges)
-  def hh = List.head(t)
-  if h._2 >= hh._2 then
-    merge_ranges_impl(List.prepend(h, List.tail(t)), acc) # Remove hh from list and keep going with h
-  else
-    merge_ranges_impl(t, List.append(acc, h)) # Keep recursing from next element (append h to acc)
-}
-
-def merge_ranges_impl(ranges : List[(Int, Int)], acc : List[(Int, Int)]) : List[(Int, Int)] = {
-  if List.isEmpty(ranges) then ranges
-  else if List.size(ranges) == 1 then
-    List.append(acc, List.head(ranges)) # Add the final range and return
-  else
-    merge_ranges_impl_body(ranges, acc)
-}
-
-# Assumes they are sorted
-def merge_ranges(ranges : List[(Int, Int)]) : List[(Int, Int)] = {
-  merge_ranges_impl(ranges, List.empty())
-}
-
 def rlist_size(list : RListB) : Int = {
   def impl(list : RListB, acc : Int) : Int = {
     if List.isEmpty(list) then
@@ -154,19 +96,7 @@ def rlist_size(list : RListB) : Int = {
 # NOTE: Just like with normal head, running it on an empty list gives runtime error
 def rlist_head(list : RListB) : RListResB = {
   def impl(list : RListB, acc : RListB, indent_level : Int) : RListB = {
-
-    # Logic when we have no indent
-    def body_no_indent(list : RListB, acc : RListB, indent_level : Int) : RListB = { # TODO: Not sure if needed...
-        def h = List.head(list)
-        def t = List.tail(list)
-        if h == open_bracket_b then
-          impl(t, acc, indent_level + 1) # First indent means not adding the open bracket as it is built-in
-        else
-          List.append(acc, h)
-    }
-
-    # Logic when we have an indent
-    def body_indent(list : RListB, acc : RListB, indent_level : Int) : RListB = {
+    def body(list : RListB, acc : RListB, indent_level : Int) : RListB = {
         def h = List.head(list)
         def t = List.tail(list)
         if h == open_bracket_b then
@@ -183,10 +113,7 @@ def rlist_head(list : RListB) : RListResB = {
     if List.isEmpty(list) then
       acc
     else
-      if indent_level == 0 then
-        body_no_indent(list, acc, indent_level)
-      else
-        body_indent(list, acc, indent_level)
+      body(list, acc, indent_level)
   }
 
   if List.head(list) == open_bracket_b then
