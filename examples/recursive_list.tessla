@@ -52,39 +52,43 @@ def closed_bracket_b = closed_bracket[Bool]
 def value_b(val : Bool) = value[Bool](val)
 def get_list_el_b(val : RListElB) = getSome(getSome(val))
 
-def serialize_rlist_b_impl_body(list : RListB, res : String, nest_level : Int) : String = {
-  def h = List.head(list)
-  def t = List.tail(list)
-    if h == open_bracket_b then
-      serialize_rlist_b_impl(List.tail(list), String.concat(res, "["), nest_level + 1)
-    else if h == closed_bracket_b then
-      if !List.isEmpty(t) && List.head(t) == closed_bracket_b then # If next element is also a closed bracket then forget the comma and space
-        serialize_rlist_b_impl(List.tail(list), String.concat(res, "]"), nest_level - 1)
+def rlist_serialize(list : RListB) : String = {
+  def impl(list : RListB, res : String, nest_level : Int) : String = {
+    def close_final_brackets(res : String, nest_level : Int) : String = {
+      if nest_level == 1 then
+        String.concat(res, "]")
       else
-        serialize_rlist_b_impl(List.tail(list), String.concat(res, "], "), nest_level - 1)
+        close_final_brackets(String.concat(res, "]"), nest_level - 1)
+    }
+
+    # Edge case: Add comma unless next element is a closed bracket
+    def maybe_comma_space(t : RListB) : String = {
+      if List.isEmpty(t) || List.head(t) == closed_bracket_b then
+        ""
+      else
+        ", "
+    }
+
+    def body(list : RListB, res : String, nest_level : Int) : String = {
+      def h = List.head(list)
+      def t = List.tail(list)
+      if h == open_bracket_b then
+        impl(List.tail(list), String.concat(res, "["), nest_level + 1)
+      else if h == closed_bracket_b then
+        impl(List.tail(list), String.concat(res, String.concat("]", maybe_comma_space(t))), nest_level - 1)
+      else
+        impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el_b(h)), maybe_comma_space(t))), nest_level)
+    }
+
+
+
+    if List.isEmpty(list) then
+      close_final_brackets(res, nest_level)
     else
-      if (List.size(list) == 1) || (List.head(t) == closed_bracket_b) then
-        serialize_rlist_b_impl(List.tail(list), String.concat(res, String.format("%s", get_list_el_b(h))), nest_level)
-      else
-        serialize_rlist_b_impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el_b(h)), ", ")), nest_level)
-}
+      body(list, res, nest_level)
+  }
 
-def serialize_rlist_b_impl_close_brackets(res : String, nest_level : Int) : String = {
-  if nest_level == 1 then
-    String.concat(res, "]")
-  else
-    serialize_rlist_b_impl_close_brackets(String.concat(res, "]"), nest_level - 1)
-}
-
-def serialize_rlist_b_impl(list : RListB, res : String, nest_level : Int) : String = {
-  if List.isEmpty(list) then
-    serialize_rlist_b_impl_close_brackets(res, nest_level)
-  else
-    serialize_rlist_b_impl_body(list, res, nest_level)
-}
-
-def serialize_rlist_b(list : RListB) : String = {
-  serialize_rlist_b_impl(list, "[", 1)
+  impl(list, "[", 1)
 }
 
 
@@ -215,7 +219,7 @@ def evaluate_tests[T1, T2](test_cases : List[T1], exp_results : List[T2], func :
   (val) => val._1 == val._2) # Evaluate if they are equal
 }
 
-out evaluate_tests(test_cases_and_empty, serialize_exp_results, serialize_rlist_b) as serialize_results
+out evaluate_tests(test_cases_and_empty, serialize_exp_results, rlist_serialize) as serialize_results
 
 out evaluate_tests(test_cases_and_empty, size_exp_results, rlist_size) as size_results
 
