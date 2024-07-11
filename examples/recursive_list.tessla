@@ -186,10 +186,6 @@ def test8 : RListB = list6(open_bracket_b, open_bracket_b, closed_bracket_b, val
 
 #### Main:
 
-def y = left[Int, Unit](42)
-def z = right[Unit, Int](69)
-def w = natCtor(0)
-
 def test_cases = list8(test1, test2, test3, test4, test5, test6, test7, test8) # Intentionally without test0 as it causes RT error for some tests
 def test_cases_and_empty = List.prepend(test0, test_cases)
 def serialize_exp_results = List.prepend("[]", list8("[true, false]", "[true, [true]]", "[[], [true, [false]]]", "[[true], [false]]", "[[[[[[[[[[]]]]]]]]]]", "[true, false, false]", "[[[]], false]", "[[[], true], false]"))
@@ -219,18 +215,10 @@ def evaluate_tests[T1, T2](test_cases : List[T1], exp_results : List[T2], func :
   (val) => val._1 == val._2) # Evaluate if they are equal
 }
 
-def serialize_results = evaluate_tests(test_cases_and_empty, serialize_exp_results, serialize_rlist_b)
-out serialize_results
+out evaluate_tests(test_cases_and_empty, serialize_exp_results, serialize_rlist_b) as serialize_results
 
-def size_results = evaluate_tests(test_cases_and_empty, size_exp_results, rlist_size)
-out size_results
+out evaluate_tests(test_cases_and_empty, size_exp_results, rlist_size) as size_results
 
-def head_results = evaluate_tests(test_cases, head_exp_results, rlist_head)
-out head_results
+out evaluate_tests(test_cases, head_exp_results, rlist_head) as head_results
 
-def tail_results = evaluate_tests(test_cases, tail_exp_results, rlist_tail)
-out tail_results
-
-out y
-out z
-out w
+out evaluate_tests(test_cases, tail_exp_results, rlist_tail) as tail_results
