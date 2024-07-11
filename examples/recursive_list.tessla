@@ -141,28 +141,14 @@ def merge_ranges(ranges : List[(Int, Int)]) : List[(Int, Int)] = {
   merge_ranges_impl(ranges, List.empty())
 }
 
-def rlist_size_b(list : RListB)  = {
-  def open_bracket_idxs = List.map(list_find_all(list, open_bracket_b), (pair) => pair._1) # Find open brackets and return only idxs
-  def closed_bracket_explicit_idxs = List.map(list_find_all(list, closed_bracket_b), (pair) => pair._1) # Find explicitly closed brackets and return only idxs
-
-  def closed_bracket_idxs =
-    if List.size(open_bracket_idxs) > List.size(closed_bracket_explicit_idxs) then
-      list_pad(closed_bracket_explicit_idxs, List.size(list), List.size(open_bracket_idxs) - List.size(closed_bracket_explicit_idxs)) # Pad it with closed bracket
+def rlist_size(list : RListB) : Int = {
+  def impl(list : RListB, acc : Int) : Int = {
+    if List.isEmpty(list) then
+      acc
     else
-      closed_bracket_explicit_idxs
-
-  def bracket_ranges_full = List.zip(open_bracket_idxs, closed_bracket_idxs) # Might contain overlapping
-  def bracket_ranges = merge_ranges(bracket_ranges_full)
-
-  def with_idxs = List.zipWithIndex(list)
-
-  def between_inclusive(min : Int, max : Int, el : ZRListElB) : Bool = el._1 >= min && el._1 <= max
-  def not_between_range(range : (Int, Int)) : (ZRListElB) => Bool = ((el) => !between_inclusive(range._1, range._2, el))
-  def interval_funcs = List.map(bracket_ranges, not_between_range)
-  def not_between_intervals(el : ZRListElB) = forall(el, interval_funcs)
-  def non_nested_els = list_filter(with_idxs, not_between_intervals)
-
-  List.size(non_nested_els) + List.size(bracket_ranges)
+      impl(rlist_tail(list), acc + 1)
+  }
+  impl(list, 0)
 }
 
 # NOTE: Just like with normal head, running it on an empty list gives runtime error
@@ -274,13 +260,13 @@ def serialize_test4 = serialize_rlist_b(test4) == "[[true], [false]]"
 def serialize_test5 = serialize_rlist_b(test5) == "[[[[[[[[[[]]]]]]]]]]"
 def serialize_test6 = serialize_rlist_b(test6) == "[true, false, false]"
 
-def size_test0 = rlist_size_b(test0) == 0
-def size_test1 = rlist_size_b(test1) == 2
-def size_test2 = rlist_size_b(test2) == 2
-def size_test3 = rlist_size_b(test3) == 2
-def size_test4 = rlist_size_b(test4) == 2
-def size_test5 = rlist_size_b(test5) == 1
-def size_test6 = rlist_size_b(test6) == 3
+def size_test0 = rlist_size(test0) == 0
+def size_test1 = rlist_size(test1) == 2
+def size_test2 = rlist_size(test2) == 2
+def size_test3 = rlist_size(test3) == 2
+def size_test4 = rlist_size(test4) == 2
+def size_test5 = rlist_size(test5) == 1
+def size_test6 = rlist_size(test6) == 3
 
 # def head_test0 = rlist_head(test0) # Runtime error
 def head_test1 = rlist_head(test1) == {isList = false, val = list1(value_b(true))}
