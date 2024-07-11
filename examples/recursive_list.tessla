@@ -73,32 +73,6 @@ def serialize_rlist_b(list : RListB) : String = {
   serialize_rlist_b_impl(list, "[", 1)
 }
 
-# def remove_nested_lists_impl_body(list : RListB, remove : Bool) : RListB = {
-#   def h = List.head(list)
-#   def removing = remove_nested_lists_impl(List.tail(list), true)
-#   def not_removing = remove_nested_lists_impl(List.tail(list), false)
-
-#   if remove then # In removing state
-#     if h == closed_bracket_b then
-#       not_removing # Stop removing
-#     else
-#       removing # Keep removing
-#   else
-#     if h == open_bracket_b then
-#       removing # Start removing
-#     else
-#       List.append(not_removing) # Add element, keep not removing
-# }
-
-# def remove_nested_lists_impl(list : RListB, rem : RListB, remove : Bool) : RListB = {
-#   # Instead of this crap, make a function that returns unit if we are skipping the element and value if we keep it.
-
-#   if List.isEmpty(list) then
-#     list
-#   else
-#     List.append(list, remove_nested_lists_impl_body(rem, remove))
-# }
-
 
 def list_filter_impl[T](list : List[T], func : (T) => Bool, acc : List[T]) : List[T] = {
   if List.isEmpty(list) then
