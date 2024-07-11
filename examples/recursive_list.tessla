@@ -24,21 +24,26 @@ def natCtor(N : Int) : Nat = {
 
 ###### 3) Recursively defined List type #####
 
-def list1[T](el : T) = List.append(List.empty(), el)
+def list1[T](el1 : T) = List.append(List.empty(), el1)
+def list2[T](el1 : T, el2 : T) = List.append(list1(el1), el2)
+def list3[T](el1 : T, el2 : T, el3 : T) = List.append(list2(el1, el2), el3)
+def list4[T](el1 : T, el2 : T, el3 : T, el4 : T) = List.append(list3(el1, el2, el3), el4)
+def list5[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T) = List.append(list4(el1, el2, el3, el4), el5)
+def list6[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T, el6 : T) = List.append(list5(el1, el2, el3, el4, el5), el6)
 
 # Rules: None means ], Some(None) means [, Some(Some(val)) means val
 # NOTE: Final closing brackets are optional
 type RListEl[T] = Option[Option[T]]
 type RList[T] = List[RListEl[T]]
-# Unfortunately, need this in order to differentiate between head([true]) and head([[true]])
-type RListHead[T] = {val : RList[T], isList : Bool}
+# Unfortunately, need this in order to differentiate between e.g., head([true]) and head([[true]])
+type RListRes[T] = {val : RList[T], isList : Bool}
 def open_bracket[T] : RListEl[T] = Some(None)
 def closed_bracket[T] : RListEl[T] = None
 def value[T](val : T) : RListEl[T] = Some(Some(val))
 
 type RListElB = RListEl[Bool]
 type RListB = RList[Bool]
-type RListHeadB = RListHead[Bool]
+type RListResB = RListRes[Bool]
 type ZRListElB = (Int, RListElB)
 def open_bracket_b = open_bracket[Bool]
 def closed_bracket_b = closed_bracket[Bool]
@@ -161,11 +166,11 @@ def rlist_size_b(list : RListB)  = {
 }
 
 # NOTE: Just like with normal head, running it on an empty list gives runtime error
-def rlist_head(list : RListB) : RListHeadB = {
+def rlist_head(list : RListB) : RListResB = {
   def impl(list : RListB, acc : RListB, indent_level : Int) : RListB = {
 
     # Logic when we have no indent
-    def body_no_indent(list : RListB, acc : RListB, indent_level : Int) : RListB = {
+    def body_no_indent(list : RListB, acc : RListB, indent_level : Int) : RListB = { # TODO: Not sure if needed...
         def h = List.head(list)
         def t = List.tail(list)
         if h == open_bracket_b then
@@ -204,45 +209,56 @@ def rlist_head(list : RListB) : RListHeadB = {
     {val = list1(List.head(list)), isList = false}
 }
 
+# NOTE: Just like with normal tail, running it on an empty list gives runtime error
+def rlist_tail(list : RListB) : RListB = {
+  def iterate(list : RListB, indent_level : Int) : RListB = {
+    def body(list : RListB, indent_level : Int) : RListB = {
+      def h = List.head(list)
+      def t = List.tail(list)
+      if h == closed_bracket_b then
+        iterate(List.tail(list), indent_level - 1)
+      else if h == open_bracket_b then
+        iterate(List.tail(list), indent_level + 1)
+      else
+        iterate(List.tail(list), indent_level)
+    }
+
+    if List.isEmpty(list) then
+      List.empty() # Means that original list contained 1 element so tail is empty list
+    else if indent_level == 0 then # Found end of list, return element after that
+      list
+    else
+      body(list, indent_level) # Do actual iteration
+  }
+
+  if rlist_head(list).isList == false then
+    List.tail(list)
+  else
+    iterate(List.tail(list), 1)
+}
+
 # []
 def test0 : RListB = List.empty()
 
 # [true, false]
-def test1 : RListB = {
-  def l1 = List.append(List.empty(), value_b(true))
-  List.append(l1, value_b(false))
-}
+def test1 : RListB = list2(value_b(true), value_b(false))
 
 # [true, [true]]
-def test2 : RListB = {
-  def l1 = List.append(List.empty, value_b(true))
-  def l2 = List.append(l1, open_bracket_b)
-  List.append(l2, value_b(true))
-}
+def test2 : RListB = list3(value_b(true), open_bracket, value_b(true))
 
 # [[], [true, [false]]]
-def test3 : RListB = {
-  def l1 = List.append(List.empty(), open_bracket_b)
-  def l2 = List.append(l1, closed_bracket_b)
-  def l3 = List.append(l2, open_bracket_b)
-  def l4 = List.append(l3, value_b(true))
-  def l5 = List.append(l4, open_bracket_b)
-  List.append(l5, value_b(false))
-}
+def test3 : RListB = list6(open_bracket_b, closed_bracket_b, open_bracket_b, value_b(true), open_bracket_b, value_b(false))
 
 # [[true], [false]]
-def test4 : RListB = {
-  def l1 = List.append(List.empty(), open_bracket_b)
-  def l2 = List.append(l1, value_b(true))
-  def l3 = List.append(l2, closed_bracket_b)
-  def l4 = List.append(l3, open_bracket_b)
-  List.append(l4, value_b(false))
-}
+def test4 : RListB = list5(open_bracket_b, value_b(true), closed_bracket_b, open_bracket_b, value_b(false))
 
 # [[[[[[[[[[]]]]]]]]]]
 def test5 : RListB = {
   List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.empty(), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b)
 }
+
+# [true, false, false]
+def test6 : RListB = list3(value_b(true), value_b(false), value_b(false))
 
 #### Main:
 
@@ -256,6 +272,7 @@ def serialize_test2 = serialize_rlist_b(test2) == "[true, [true]]"
 def serialize_test3 = serialize_rlist_b(test3) == "[[], [true, [false]]]"
 def serialize_test4 = serialize_rlist_b(test4) == "[[true], [false]]"
 def serialize_test5 = serialize_rlist_b(test5) == "[[[[[[[[[[]]]]]]]]]]"
+def serialize_test6 = serialize_rlist_b(test6) == "[true, false, false]"
 
 def size_test0 = rlist_size_b(test0) == 0
 def size_test1 = rlist_size_b(test1) == 2
@@ -263,17 +280,28 @@ def size_test2 = rlist_size_b(test2) == 2
 def size_test3 = rlist_size_b(test3) == 2
 def size_test4 = rlist_size_b(test4) == 2
 def size_test5 = rlist_size_b(test5) == 1
+def size_test6 = rlist_size_b(test6) == 3
 
 # def head_test0 = rlist_head(test0) # Runtime error
-def head_test1 = rlist_head(test1) == {isList = false, val = list1(Some(Some(true)))}
-def head_test2 = rlist_head(test2) == {isList = false, val = list1(Some(Some(true)))}
+def head_test1 = rlist_head(test1) == {isList = false, val = list1(value_b(true))}
+def head_test2 = rlist_head(test2) == {isList = false, val = list1(value_b(true))}
 def head_test3 = rlist_head(test3) == {isList = true, val = List.empty()}
-def head_test4 = rlist_head(test4) == {isList = true, val = list1(Some(Some(true)))}
-def head_test5 = rlist_head(test5) == {isList = true, val = List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.append(List.empty(), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b), open_bracket_b)}
+def head_test4 = rlist_head(test4) == {isList = true, val = list1(value_b(true))}
+def head_test5 = rlist_head(test5) == {isList = true, val = List.tail(test5)}
+def head_test6 = rlist_head(test6) == {isList = false, val = list1(value_b(true))}
 
-def all_serialize_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5
-def all_size_tests_passed = size_test0 && size_test1 && size_test2 && size_test3 && size_test4 && size_test5
-def all_head_tests_passed = head_test1 && head_test2 && head_test3 && head_test4 && head_test5
+# def tail_test0 = rlist_tail(test0) # Runtime error
+def tail_test1 = rlist_tail(test1) == list1(value_b(false))
+def tail_test2 = rlist_tail(test2) == list2(open_bracket_b, value_b(true))
+def tail_test3 = rlist_tail(test3) == list4(open_bracket_b, value_b(true), open_bracket_b, value_b(false))
+def tail_test4 = rlist_tail(test4) == list2(open_bracket_b, value_b(false))
+def tail_test5 = rlist_tail(test5) == List.empty()
+def tail_test6 = rlist_tail(test6) == list2(value_b(false), value_b(false))
+
+def all_serialize_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5 && serialize_test6
+def all_size_tests_passed = size_test0 && size_test1 && size_test2 && size_test3 && size_test4 && size_test5 && size_test6
+def all_head_tests_passed = head_test1 && head_test2 && head_test3 && head_test4 && head_test5 && head_test6
+def all_tail_tests_passed = tail_test1 && tail_test2 && tail_test3 && tail_test4 && tail_test5 && tail_test6
 
 out y
 out z
@@ -281,3 +309,7 @@ out w
 out all_serialize_tests_passed
 out all_size_tests_passed
 out all_head_tests_passed
+out all_tail_tests_passed
+
+# NOTE: Think there is a bug hidden somewhere within head_test5...
+# I think that it should technically be returning List.tail(List.tail(test5)) because isList=true. 
