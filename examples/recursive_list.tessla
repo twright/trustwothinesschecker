@@ -30,6 +30,8 @@ def list3[T](el1 : T, el2 : T, el3 : T) = List.append(list2(el1, el2), el3)
 def list4[T](el1 : T, el2 : T, el3 : T, el4 : T) = List.append(list3(el1, el2, el3), el4)
 def list5[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T) = List.append(list4(el1, el2, el3, el4), el5)
 def list6[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T, el6 : T) = List.append(list5(el1, el2, el3, el4, el5), el6)
+def list7[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T, el6 : T, el7 : T) = List.append(list6(el1, el2, el3, el4, el5, el6), el7)
+def list8[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T, el6 : T, el7 : T, el8 : T) = List.append(list7(el1, el2, el3, el4, el5, el6, el7), el8)
 
 # Rules: None means ], Some(None) means [, Some(Some(val)) means val
 # NOTE: Final closing brackets are optional
@@ -56,7 +58,10 @@ def serialize_rlist_b_impl_body(list : RListB, res : String, nest_level : Int) :
     if h == open_bracket_b then
       serialize_rlist_b_impl(List.tail(list), String.concat(res, "["), nest_level + 1)
     else if h == closed_bracket_b then
-      serialize_rlist_b_impl(List.tail(list), String.concat(res, "], "), nest_level - 1)
+      if !List.isEmpty(t) && List.head(t) == closed_bracket_b then # If next element is also a closed bracket then forget the comma and space
+        serialize_rlist_b_impl(List.tail(list), String.concat(res, "]"), nest_level - 1)
+      else
+        serialize_rlist_b_impl(List.tail(list), String.concat(res, "], "), nest_level - 1)
     else
       if (List.size(list) == 1) || (List.head(t) == closed_bracket_b) then
         serialize_rlist_b_impl(List.tail(list), String.concat(res, String.format("%s", get_list_el_b(h))), nest_level)
@@ -173,28 +178,38 @@ def test5 : RListB = {
 # [true, false, false]
 def test6 : RListB = list3(value_b(true), value_b(false), value_b(false))
 
+# [[[]], false]
+def test7 : RListB = list5(open_bracket_b, open_bracket_b, closed_bracket_b, closed_bracket_b, value_b(false))
+
+# [[[], true], false]
+def test8 : RListB = list6(open_bracket_b, open_bracket_b, closed_bracket_b, value_b(true), closed_bracket_b, value_b(false))
+
 #### Main:
 
 def y = left[Int, Unit](42)
 def z = right[Unit, Int](69)
 def w = natCtor(0)
 
-def test_cases = list6(test1, test2, test3, test4, test5, test6) # Intentionally without test0 as it causes RT error for some tests
+def test_cases = list8(test1, test2, test3, test4, test5, test6, test7, test8) # Intentionally without test0 as it causes RT error for some tests
 def test_cases_and_empty = List.prepend(test0, test_cases)
-def serialize_exp_results = List.prepend("[]", list6("[true, false]", "[true, [true]]", "[[], [true, [false]]]", "[[true], [false]]", "[[[[[[[[[[]]]]]]]]]]", "[true, false, false]"))
-def size_exp_results = List.prepend(0, list6(2, 2, 2, 2, 1, 3))
-def head_exp_results = list6( {isList = false, val = list1(value_b(true))},
+def serialize_exp_results = List.prepend("[]", list8("[true, false]", "[true, [true]]", "[[], [true, [false]]]", "[[true], [false]]", "[[[[[[[[[[]]]]]]]]]]", "[true, false, false]", "[[[]], false]", "[[[], true], false]"))
+def size_exp_results = List.prepend(0, list8(2, 2, 2, 2, 1, 3, 2, 2))
+def head_exp_results = list8( {isList = false, val = list1(value_b(true))},
                           {isList = false, val = list1(value_b(true))},
                           {isList = true, val = List.empty()},
                           {isList = true, val = list1(value_b(true))},
                           {isList = true, val = List.tail(test5)},
-                          {isList = false, val = list1(value_b(true))})
-def tail_exp_results = list6( list1(value_b(false)),
+                          {isList = false, val = list1(value_b(true))},
+                          {isList = true, val = list2(open_bracket_b, closed_bracket_b)},
+                          {isList = true, val = list3(open_bracket_b, closed_bracket_b, value_b((true)))})
+def tail_exp_results = list8( list1(value_b(false)),
                           list2(open_bracket_b, value_b(true)),
                           list4(open_bracket_b, value_b(true), open_bracket_b, value_b(false)),
                           list2(open_bracket_b, value_b(false)),
                           List.empty(),
-                          list2(value_b(false), value_b(false)))
+                          list2(value_b(false), value_b(false)),
+                          list1(value_b(false)),
+                          list1(value_b(false)))
 
 def evaluate_tests[T1, T2](test_cases : List[T1], exp_results : List[T2], func : (T1) => T2) : List[Bool] = {
   List.map(
@@ -216,28 +231,6 @@ out head_results
 def tail_results = evaluate_tests(test_cases, tail_exp_results, rlist_tail)
 out tail_results
 
-
-# def head_test0 = rlist_head(test0) # Runtime error
-def head_test1 = rlist_head(test1) == {isList = false, val = list1(value_b(true))}
-def head_test2 = rlist_head(test2) == {isList = false, val = list1(value_b(true))}
-def head_test3 = rlist_head(test3) == {isList = true, val = List.empty()}
-def head_test4 = rlist_head(test4) == {isList = true, val = list1(value_b(true))}
-def head_test5 = rlist_head(test5) == {isList = true, val = List.tail(test5)}
-def head_test6 = rlist_head(test6) == {isList = false, val = list1(value_b(true))}
-
-# def tail_test0 = rlist_tail(test0) # Runtime error
-def tail_test1 = rlist_tail(test1) == list1(value_b(false))
-def tail_test2 = rlist_tail(test2) == list2(open_bracket_b, value_b(true))
-def tail_test3 = rlist_tail(test3) == list4(open_bracket_b, value_b(true), open_bracket_b, value_b(false))
-def tail_test4 = rlist_tail(test4) == list2(open_bracket_b, value_b(false))
-def tail_test5 = rlist_tail(test5) == List.empty()
-def tail_test6 = rlist_tail(test6) == list2(value_b(false), value_b(false))
-
-
 out y
 out z
 out w
-
-
-# NOTE: Think there is a bug hidden somewhere within head_test5...
-# I think that it should technically be returning List.tail(List.tail(test5)) because isList=true. 
