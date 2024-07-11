@@ -42,18 +42,10 @@ type RListRes[T] = {val : RList[T], isList : Bool}
 def open_bracket[T] : RListEl[T] = Some(None)
 def closed_bracket[T] : RListEl[T] = None
 def value[T](val : T) : RListEl[T] = Some(Some(val))
+def get_list_el[T](val : RListEl[T]) = getSome(getSome(val))
 
-type RListElB = RListEl[Bool]
-type RListB = RList[Bool]
-type RListResB = RListRes[Bool]
-type ZRListElB = (Int, RListElB)
-def open_bracket_b = open_bracket[Bool]
-def closed_bracket_b = closed_bracket[Bool]
-def value_b(val : Bool) = value[Bool](val)
-def get_list_el_b(val : RListElB) = getSome(getSome(val))
-
-def rlist_serialize(list : RListB) : String = {
-  def impl(list : RListB, res : String, nest_level : Int) : String = {
+def rlist_serialize[T](list : RList[T]) : String = {
+  def impl[T](list : RList[T], res : String, nest_level : Int) : String = {
     def close_final_brackets(res : String, nest_level : Int) : String = {
       if nest_level == 1 then
         String.concat(res, "]")
@@ -62,22 +54,22 @@ def rlist_serialize(list : RListB) : String = {
     }
 
     # Edge case: Add comma unless next element is a closed bracket
-    def maybe_comma_space(t : RListB) : String = {
-      if List.isEmpty(t) || List.head(t) == closed_bracket_b then
+    def maybe_comma_space[T](t : RList[T]) : String = {
+      if List.isEmpty(t) || List.head(t) == closed_bracket[T] then
         ""
       else
         ", "
     }
 
-    def body(list : RListB, res : String, nest_level : Int) : String = {
+    def body[T](list : RList[T], res : String, nest_level : Int) : String = {
       def h = List.head(list)
       def t = List.tail(list)
-      if h == open_bracket_b then
+      if h == open_bracket[T] then
         impl(List.tail(list), String.concat(res, "["), nest_level + 1)
-      else if h == closed_bracket_b then
+      else if h == closed_bracket[T] then
         impl(List.tail(list), String.concat(res, String.concat("]", maybe_comma_space(t))), nest_level - 1)
       else
-        impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el_b(h)), maybe_comma_space(t))), nest_level)
+        impl(List.tail(list), String.concat(res, String.concat(String.format("%s", get_list_el[T](h)), maybe_comma_space(t))), nest_level)
     }
 
     if List.isEmpty(list) then
@@ -90,8 +82,8 @@ def rlist_serialize(list : RListB) : String = {
 }
 
 
-def rlist_size(list : RListB) : Int = {
-  def impl(list : RListB, acc : Int) : Int = {
+def rlist_size[T](list : RList[T]) : Int = {
+  def impl[T](list : RList[T], acc : Int) : Int = {
     if List.isEmpty(list) then
       acc
     else
@@ -101,14 +93,14 @@ def rlist_size(list : RListB) : Int = {
 }
 
 # NOTE: Just like with normal head, running it on an empty list gives runtime error
-def rlist_head(list : RListB) : RListResB = {
-  def impl(list : RListB, acc : RListB, indent_level : Int) : RListB = {
-    def body(list : RListB, acc : RListB, indent_level : Int) : RListB = {
+def rlist_head[T](list : RList[T]) : RListRes[T] = {
+  def impl[T](list : RList[T], acc : RList[T], indent_level : Int) : RList[T] = {
+    def body[T](list : RList[T], acc : RList[T], indent_level : Int) : RList[T] = {
         def h = List.head(list)
         def t = List.tail(list)
-        if h == open_bracket_b then
+        if h == open_bracket[T] then
           impl(t, List.append(acc, h), indent_level + 1)
-        else if h == closed_bracket_b then
+        else if h == closed_bracket[T] then
           if indent_level == 1 then # If this is final closed bracket
             acc
           else
@@ -123,21 +115,21 @@ def rlist_head(list : RListB) : RListResB = {
       body(list, acc, indent_level)
   }
 
-  if List.head(list) == open_bracket_b then
+  if List.head(list) == open_bracket[T] then
     {val = impl(List.tail(list), List.empty(), 1), isList = true}
   else
     {val = list1(List.head(list)), isList = false}
 }
 
 # NOTE: Just like with normal tail, running it on an empty list gives runtime error
-def rlist_tail(list : RListB) : RListB = {
-  def iterate(list : RListB, indent_level : Int) : RListB = {
-    def body(list : RListB, indent_level : Int) : RListB = {
+def rlist_tail[T](list : RList[T]) : RList[T] = {
+  def iterate(list : RList[T], indent_level : Int) : RList[T] = {
+    def body(list : RList[T], indent_level : Int) : RList[T] = {
       def h = List.head(list)
       def t = List.tail(list)
-      if h == closed_bracket_b then
+      if h == closed_bracket[T] then
         iterate(List.tail(list), indent_level - 1)
-      else if h == open_bracket_b then
+      else if h == open_bracket[T] then
         iterate(List.tail(list), indent_level + 1)
       else
         iterate(List.tail(list), indent_level)
@@ -156,6 +148,13 @@ def rlist_tail(list : RListB) : RListB = {
   else
     iterate(List.tail(list), 1)
 }
+
+# Test definitions
+
+type RListB = RList[Bool]
+def open_bracket_b = open_bracket[Bool]
+def closed_bracket_b = closed_bracket[Bool]
+def value_b(val : Bool) = value[Bool](val)
 
 # []
 def test0 : RListB = List.empty()
