@@ -252,21 +252,43 @@ def y = left[Int, Unit](42)
 def z = right[Unit, Int](69)
 def w = natCtor(0)
 
-def serialize_test0 = serialize_rlist_b(test0) == "[]"
-def serialize_test1 = serialize_rlist_b(test1) == "[true, false]"
-def serialize_test2 = serialize_rlist_b(test2) == "[true, [true]]"
-def serialize_test3 = serialize_rlist_b(test3) == "[[], [true, [false]]]"
-def serialize_test4 = serialize_rlist_b(test4) == "[[true], [false]]"
-def serialize_test5 = serialize_rlist_b(test5) == "[[[[[[[[[[]]]]]]]]]]"
-def serialize_test6 = serialize_rlist_b(test6) == "[true, false, false]"
+def test_cases = list6(test1, test2, test3, test4, test5, test6) # Intentionally without test0 as it causes RT error for some tests
+def test_cases_and_empty = List.prepend(test0, test_cases)
+def serialize_exp_results = List.prepend("[]", list6("[true, false]", "[true, [true]]", "[[], [true, [false]]]", "[[true], [false]]", "[[[[[[[[[[]]]]]]]]]]", "[true, false, false]"))
+def size_exp_results = List.prepend(0, list6(2, 2, 2, 2, 1, 3))
+def head_exp_results = list6( {isList = false, val = list1(value_b(true))},
+                          {isList = false, val = list1(value_b(true))},
+                          {isList = true, val = List.empty()},
+                          {isList = true, val = list1(value_b(true))},
+                          {isList = true, val = List.tail(test5)},
+                          {isList = false, val = list1(value_b(true))})
+def tail_exp_results = list6( list1(value_b(false)),
+                          list2(open_bracket_b, value_b(true)),
+                          list4(open_bracket_b, value_b(true), open_bracket_b, value_b(false)),
+                          list2(open_bracket_b, value_b(false)),
+                          List.empty(),
+                          list2(value_b(false), value_b(false)))
 
-def size_test0 = rlist_size(test0) == 0
-def size_test1 = rlist_size(test1) == 2
-def size_test2 = rlist_size(test2) == 2
-def size_test3 = rlist_size(test3) == 2
-def size_test4 = rlist_size(test4) == 2
-def size_test5 = rlist_size(test5) == 1
-def size_test6 = rlist_size(test6) == 3
+def evaluate_tests[T1, T2](test_cases : List[T1], exp_results : List[T2], func : (T1) => T2) : List[Bool] = {
+  List.map(
+    List.zip(
+      List.map(test_cases, func), # Call func on every case
+    exp_results), # Zip with expected results
+  (val) => val._1 == val._2) # Evaluate if they are equal
+}
+
+def serialize_results = evaluate_tests(test_cases_and_empty, serialize_exp_results, serialize_rlist_b)
+out serialize_results
+
+def size_results = evaluate_tests(test_cases_and_empty, size_exp_results, rlist_size)
+out size_results
+
+def head_results = evaluate_tests(test_cases, head_exp_results, rlist_head)
+out head_results
+
+def tail_results = evaluate_tests(test_cases, tail_exp_results, rlist_tail)
+out tail_results
+
 
 # def head_test0 = rlist_head(test0) # Runtime error
 def head_test1 = rlist_head(test1) == {isList = false, val = list1(value_b(true))}
@@ -284,18 +306,11 @@ def tail_test4 = rlist_tail(test4) == list2(open_bracket_b, value_b(false))
 def tail_test5 = rlist_tail(test5) == List.empty()
 def tail_test6 = rlist_tail(test6) == list2(value_b(false), value_b(false))
 
-def all_serialize_tests_passed = serialize_test0 && serialize_test1 && serialize_test2 && serialize_test3 && serialize_test4 && serialize_test5 && serialize_test6
-def all_size_tests_passed = size_test0 && size_test1 && size_test2 && size_test3 && size_test4 && size_test5 && size_test6
-def all_head_tests_passed = head_test1 && head_test2 && head_test3 && head_test4 && head_test5 && head_test6
-def all_tail_tests_passed = tail_test1 && tail_test2 && tail_test3 && tail_test4 && tail_test5 && tail_test6
 
 out y
 out z
 out w
-out all_serialize_tests_passed
-out all_size_tests_passed
-out all_head_tests_passed
-out all_tail_tests_passed
+
 
 # NOTE: Think there is a bug hidden somewhere within head_test5...
 # I think that it should technically be returning List.tail(List.tail(test5)) because isList=true. 
