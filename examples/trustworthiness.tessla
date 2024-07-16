@@ -1,12 +1,15 @@
 type MAPLE = {Stage: String}
 type Data = Map[String, Int]
-type Assm = {var: String, min: Option[Int], max: Option[Int]}
+type Assm = {var: String, target: Int, min: Option[Int], max: Option[Int]}
 type Assms = List[Assm]
 
 in maple : Events[MAPLE]
 in knowledge : Events[Data]
 in ms : Events[Data]
 in assms : Events[Assms]
+
+def targetKnowledge: Int = 1
+def targetManagedSystem: Int = 2
 
 liftable
 def concat[D](xs: List[D], ys: List[D]): List[D] = {
@@ -19,7 +22,11 @@ def all(xs: List[Bool]): Bool =
     List.fold(xs, true, Operators.and)
 
 liftable
-def eval_assm(assm : Assm, x: Data): Bool =
+def eval_assm(assm : Assm, knowledge: Data, managedSystem: Data): Bool =
+    def x: Data = (if assm.target == targetKnowledge
+                   then knowledge
+                   else managedSystem)
+
     (
         if isSome(assm.min) && Map.contains(x, assm.var)
         then Option.getSome(assm.min) <= Map.get(x, assm.var)
@@ -31,8 +38,10 @@ def eval_assm(assm : Assm, x: Data): Bool =
     )
 
 liftable
-def eval_assms(assms: List[Assm], x: Data): Bool =
-    all(List.map(assms, (assm: Assm) => eval_assm(assm, x)))
+def eval_assms(assms: List[Assm], knowledge: Data, managedSystem: Data): Bool =
+    all(List.map(assms,
+                 (assm: Assm) =>
+                 eval_assm(assm, knowledge, managedSystem)))
 
 liftable
 def eval_my_assm(y: Data): Bool ={
@@ -40,4 +49,4 @@ def eval_my_assm(y: Data): Bool ={
     eval_assm(assm, y)
 }
 
-out eval_assms(assms, ms) as assms_hold
+out eval_assms(assms, knowledge, ms) as assms_hold

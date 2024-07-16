@@ -1,12 +1,47 @@
 # Implementation of combinator parsers in Tessla
 
-type Parser[K] = ((String) => Optional[K])
+in x: Events[String]
 
-def add_action[K,L](action: (String, Optional[K]) => L,
-                    parser: Parser[K]) : Parser[L] =
-    (s: String) => action(x, parser(s))
+type Parser[K] = ((String) => List[(K, String)])
 
-def whitespace(s: String): Unit:
-    if String.isEmpty(s):
-        Some ()
-    else if 
+liftable def head(str: String): String =
+    extern("String_head")
+liftable def tail(str: String): String =
+    extern("String_tail")
+liftable def length(str: String): Int =
+    extern("String_length")
+liftable def toList(str: String): List[String] =
+    extern("String_toList")
+
+#def parserMap[K,L](f: (String, Optional[K]) => L,
+#                   parser: Parser[K]) : Parser[L] =
+#    (s: String) => action(x, parser(s))
+
+def is_empty(s: String): Bool =
+    s == ""
+
+liftable
+def empty(str: String): List[(String, String)] =
+    if is_empty(str) then
+        List.prepend((str, ""), List.empty())
+    else
+        List.empty()
+
+liftable
+def symbol(symb: String): ((String) => List[(String, String)]) =
+    def f(str: String): List[(String, String)] =
+        if is_empty(str) then
+            List.empty()
+        else if head(str) == symb then
+            List.prepend((symb, tail(str)), List.empty())
+        else
+            List.empty()
+    f
+
+#def whitespace(s: String): Optional[Unit]:
+#    if is_empty(s) then
+#        Some (nil)
+#    else
+#        None
+
+out empty(x)
