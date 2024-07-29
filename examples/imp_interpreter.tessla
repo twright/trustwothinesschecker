@@ -206,6 +206,7 @@ def ANum = 1
 def APlus = 2
 def AMinus = 3
 def AMult = 4
+def AId = 5
 
 type BExprType = Int
 def BTrue = 1
@@ -215,12 +216,17 @@ def BLe = 4
 def BNot = 5
 def BAnd = 6
 
+type ComType = Int
+def CSkip = 1
+def CAssign = 2
+def CSeq = 3
+def CIf = 4
+def CWhile = 5
+
 type LexicalClass = Int
 def AExpr = 1
 def BExpr = 2
-def DataInt = 3
-def DataString = 4
-def DataBool = 5
+def Com = 3
 
 type DataType = Int
 def dataTypeNone = 1
@@ -256,9 +262,28 @@ def astAExprOp(typ: AExprType): ASTEntry =
 def astAExprNum(x: Int): ASTEntry =
     {lexClass = AExpr, exprType = ANum, strVal = None, intVal = Some(x),
      boolVal = None}
+def astAExprVar(x: String): ASTEntry =
+    {lexClass = AExpr, exprType = AId, strVal = Some(x), intVal = None,
+     boolVal = None}
 
 def astBExprOp(typ: BExprType): ASTEntry =
     {lexClass = BExpr, exprType = typ, strVal = None, intVal = None,
+     boolVal = None}
+
+def astComSkip(): ASTEntry =
+    {lexClass = Com, exprType = CSkip, strVal = None, intVal = None,
+     boolVal = None}
+def astComAssign(x: String): ASTEntry =
+    {lexClass = Com, exprType = CAssign, strVal = Some(x), intVal = None,
+     boolVal = None}
+def astComSeq(): ASTEntry =
+    {lexClass = Com, exprType = CSeq, strVal = None, intVal = None,
+     boolVal = None}
+def astComIf(): ASTEntry =
+    {lexClass = Com, exprType = CIf, strVal = None, intVal = None,
+     boolVal = None}
+def astComWhile(): ASTEntry =
+    {lexClass = Com, exprType = CWhile, strVal = None, intVal = None,
      boolVal = None}
 
 type AST = Tree[ASTEntry]
@@ -272,56 +297,123 @@ def plusExpr: AST =
         (astAExprNum(3), 2)
     )
 
-def evalExpr(expr: AST, stack: Stack[Int]): ProgData = {
-    def evalExprRec(index: Int, stack: Stack[Int]): ProgData = {
+def evalExpr(expr: AST, stack: Stack[Int]): (ProgData, Stack[Int]) = {
+    def evalExprRec(index: Int, stack: Stack[Int]): (ProgData, Stack[Int]) = {
         def root = List.get(expr, index)
         def children = childrenIndexes(expr, index)
 
         if root._1.lexClass == AExpr then
             if root._1.exprType == ANum then
-                progDataInt(getSome(root._1.intVal))
+                (progDataInt(getSome(root._1.intVal)), stack)
             else if root._1.exprType == APlus then
-                progDataInt(
-                    getIntVal(evalExprRec(List.get(children, 0), stack)) +
-                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                (
+                    progDataInt(
+                        getIntVal(evalExprRec(List.get(children, 0), stack)._1)
+                        +
+                        getIntVal(evalExprRec(List.get(children, 1), stack)._1)
+                    ),
+                    stack
                 )
             else if root._1.exprType == AMult then
-                progDataInt(
-                    getIntVal(evalExprRec(List.get(children, 0), stack)) *
-                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                (
+                    progDataInt(
+                        getIntVal(evalExprRec(List.get(children, 0), stack)._1)
+                        *
+                        getIntVal(evalExprRec(List.get(children, 1), stack)._1)
+                    ),
+                    stack
                 )
             else if root._1.exprType == AMinus then
-                progDataInt(
-                    getIntVal(evalExprRec(List.get(children, 0), stack)) -
-                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                (
+                    progDataInt(
+                        getIntVal(evalExprRec(List.get(children, 0), stack)._1)
+                        -
+                        getIntVal(evalExprRec(List.get(children, 1), stack)._1)
+                    ),
+                    stack
+                )
+            else if root._1.exprType == AId then
+                # Will fail if the variable is not in the stack
+                (
+                    progDataInt(getSome(stackGet(stack,
+                        getSome(root._1.strVal)))),
+                    stack
                 )
             else
                 getSome(None)
         else if root._1.lexClass == BExpr then
             if root._1.exprType == BTrue then
-                progDataBool(true)
+                (progDataBool(true), stack)
             else if root._1.exprType == BFalse then
-                progDataBool(false)
+                (progDataBool(false), stack)
             else if root._1.exprType == BEq then
-                progDataBool(
-                    getIntVal(evalExprRec(List.get(children, 0), stack)) ==
-                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                (
+                    progDataBool(
+                        getIntVal(evalExprRec(List.get(children, 0), stack)._1)
+                        ==
+                        getIntVal(evalExprRec(List.get(children, 1), stack)._1)
+                    ),
+                    stack
                 )
             else if root._1.exprType == BLe then
-                progDataBool(
-                    getIntVal(evalExprRec(List.get(children, 0), stack)) <=
-                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                (
+                    progDataBool(
+                        getIntVal(evalExprRec(List.get(children, 0), stack)._1)
+                        <=
+                        getIntVal(evalExprRec(List.get(children, 1), stack)._1)
+                    ),
+                    stack
                 )
             else if root._1.exprType == BNot then
-                progDataBool(
-                    !getBoolVal(evalExprRec(List.get(children, 0), stack))
+                (
+                    progDataBool(
+                        !getBoolVal(evalExprRec(List.get(children, 0),
+                            stack)._1)
+                    ),
+                    stack
                 )
             else if root._1.exprType == BAnd then
-                progDataBool(
-                    getBoolVal(evalExprRec(List.get(children, 0), stack)) &&
-                    getBoolVal(evalExprRec(List.get(children, 1), stack))
+                (
+                    progDataBool(
+                        getBoolVal(evalExprRec(List.get(children, 0), stack)._1)
+                        &&
+                        getBoolVal(evalExprRec(List.get(children, 1), stack)._1)
+                    ),
+                    stack
                 )
             else
+                getSome(None)
+        else if root._1.lexClass == Com then
+            if root._1.exprType == CSkip then
+                (progDataNone, stack)
+            else if root._1.exprType == CAssign then {
+                def x = getSome(root._1.strVal)
+                def a = getIntVal(evalExprRec(List.get(children, 0),
+                    stack)._1)
+                def new_stack = stackSet(stack, x, a)
+                (progDataNone, new_stack)
+            } else if root._1.exprType == CSeq then {
+                def res1 = evalExprRec(List.get(children, 0), stack)
+                def stack1 = res1._2
+                evalExprRec(List.get(children, 1), stack1)
+            } else if root._1.exprType == CIf then {
+                def res1 = evalExprRec(List.get(children, 0), stack)
+                def b1 = getBoolVal(res1._1)
+                def stack1 = res1._2
+                if b1 then
+                    evalExprRec(List.get(children, 1), stack1)
+                else
+                    evalExprRec(List.get(children, 2), stack1)
+            } else if root._1.exprType == CWhile then {
+                def res1 = evalExprRec(List.get(children, 0),
+                    stack)
+                def b1 = getBoolVal(res1._1)
+                def stack1 = res1._2
+                if b1 then
+                    evalExprRec(index, stack1)
+                else
+                    (progDataNone, stack1)
+            } else
                 getSome(None)
         else
             getSome(None)
@@ -336,6 +428,19 @@ def mulExpr = list3(
     (astAExprNum(3), 1)
 )
 
+def plusExpr2: AST =
+    list5(
+        (astAExprOp(APlus), 0),
+        (astAExprNum(1), 1),
+        (astAExprOp(AMult), 1),
+        (astAExprVar("x"), 2),
+        (astAExprNum(3), 2)
+    )
+def stack1: Stack[Int] = list1(
+    Map.add(Map.empty(), "x", 2)
+)
+
+out evalExpr(plusExpr2, stack1)
 out evalExpr(mulExpr, stackNil[Int])
 out evalExpr(plusExpr, stackNil[Int])
 out filterList(
