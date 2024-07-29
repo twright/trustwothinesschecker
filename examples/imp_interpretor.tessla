@@ -1,0 +1,359 @@
+type Either[L, R] := {isLeft : Bool, left : Option[L], right : Option[R]}
+def left[L, R](val : L) : Either[L, R] = {isLeft = true, left = Some(val), right = None}
+def right[L, R](val : R) : Either[L, R] = {isLeft = false, left = None, right = Some(val)}
+
+def isLeft[L, R](e : Either[L, R]) : Bool = e.isLeft
+def isRight[L, R](e : Either[L, R]) : Bool = e.isLeft
+def getLeft[L, R](e : Either[L, R]) : L = getSome(e.left)
+def getRight[L, R](e : Either[L, R]) : R = getSome(e.right)
+def mapLeft[L, R, W](f: (L) => W, e : Either[L, R]) : Either[W, R] = (
+    if isLeft(e) then left(f(getLeft(e))) else right(getRight(e))
+)
+def mapRight[L, R, W](f: (R) => W, e : Either[L, R]) : Either[L, W] = (
+    if isLeft(e) then left(getLeft(e)) else right(f(getRight(e)))
+)
+
+def list1[T](el1 : T): List[T] =
+    List.append(List.empty(), el1)
+def list2[T](el1 : T, el2 : T): List[T] =
+    List.append(list1(el1), el2)
+def list3[T](el1 : T, el2 : T, el3 : T): List[T] =
+    List.append(list2(el1, el2), el3)
+def list4[T](el1 : T, el2 : T, el3 : T, el4 : T): List[T] =
+    List.append(list3(el1, el2, el3), el4)
+def list5[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T): List[T] =
+    List.append(list4(el1, el2, el3, el4), el5)
+def list6[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T, el6 : T): List[T] =
+    List.append(list5(el1, el2, el3, el4, el5), el6)
+def list7[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T, el6 : T,
+             el7 : T): List[T] =
+    List.append(list6(el1, el2, el3, el4, el5, el6), el7)
+def list8[T](el1 : T, el2 : T, el3 : T, el4 : T, el5 : T, el6 : T, el7 : T,
+             el8 : T): List[T] =
+    List.append(list7(el1, el2, el3, el4, el5, el6, el7), el8)
+
+# def dataTypeInt = 1
+# def dataTypeString = 2
+# type ElemData = {dataType: Int, intVal: Int, strVal: String}
+#type StackEntry = Either[#]
+
+# (Value, Level)
+type Node[T] = (T, Int)
+type Tree[T] = List[Node[T]]
+
+def treeMap[T, K](t: Tree[T], f: (T) => K): Tree[K] =
+    List.map(t, (n: Node[T]) => (f(n._1), n._2))
+
+def concat[D](xs: List[D], ys: List[D]): List[D] = {
+    if List.isEmpty(ys)
+    then xs
+    else concat(List.append(xs, List.head(ys)), List.tail(ys))
+}
+
+def treeMapLevel[T](t: Tree[T], f: (Int) => Int): Tree[T] =
+    List.map(t, (n: Node[T]) => (n._1, f(n._2)))
+
+def splitList[T](xs: List[T], index: Int): (List[T], List[T]) =
+    if index == 0 then
+        (List.empty(), xs)
+    else if List.isEmpty(xs) || (index < 0) || (index > List.size(xs)) then
+        getSome(None)
+    else {
+        def yss = splitList(List.tail(xs), index - 1)
+        def left = yss._1
+        def right = yss._2
+        (List.prepend(List.head(xs), left), right)
+    }
+
+def takeWhile[T](xs: List[T], p: (T) => Bool): List[T] =
+    if List.isEmpty(xs) || !p(List.head(xs)) then
+        List.empty()
+    else
+        List.prepend(List.head(xs), takeWhile(List.tail(xs), p))
+
+def subtree[T](tree: Tree[T], rootIndex: Int): Tree[T] = {
+    def root = List.get(tree, rootIndex)
+    def level = root._2
+
+    def yss = splitList(tree, rootIndex + 1)
+    def afterRoot: Tree[T] = yss._2
+
+    def subtreeRaw = List.prepend(
+        root,
+        takeWhile(afterRoot, (n) => n._2 > level)
+    )
+
+    treeMapLevel(subtreeRaw, (n) => n - level)
+}
+
+def filterList[T](xs: List[T], p: (T) => Bool): List[T] =
+    List.fold(
+        xs,
+        List.empty(),
+        (acc: List[T], n: T) => if p(n) then List.append(acc, n) else acc
+    )
+
+def childrenIndexed[T](tree: Tree[T], rootIndex: Int): List[(Int, T)] = {
+    def sub: Tree[T] = subtree(tree, rootIndex)
+    def subIndexed: List[(Int, Node[T])] = List.map(
+        List.zipWithIndex(sub),
+        (n) => (n._1 + rootIndex, n._2)
+    )
+    List.map(
+        filterList(subIndexed, (n) => n._2._2 == 1),
+        (n) => (n._1, n._2._1)
+    )
+}
+
+def childrenIndexes[T](tree: Tree[T], rootIndex: Int): List[Int] = {
+    List.map(
+        childrenIndexed(tree, rootIndex),
+        (n) => n._1
+    )
+}
+
+def children[T](tree: Tree[T], rootIndex: Int): List[T] = {
+    List.map(
+        childrenIndexed(tree, rootIndex),
+        (n) => n._2
+    )
+}
+
+def removeSubtree[T](tree: Tree[T], rootIndex: Int): Tree[T] = {
+    def root = List.get(tree, rootIndex)
+    def level = root._2
+
+    def yss1 = splitList(tree, rootIndex)
+    def beforeRoot: Tree[T] = yss1._1
+
+    def yss2 = splitList(tree, rootIndex + 1)
+    def afterRoot: Tree[T] = yss2._2
+
+    def subtreeRaw = takeWhile(afterRoot, (n) => n._2 > level)
+    def yss3 = splitList(afterRoot, List.size(subtreeRaw))
+    def afterSubtree = yss3._2
+
+    concat(beforeRoot, afterSubtree)
+}
+
+def insert[T](parent: Tree[T], subtree: Tree[T], index: Int): Tree[T] = {
+    def yss = splitList(parent, index)
+    def left = yss._1
+    def right = yss._2
+    def level: Int = List.get(parent, index)._2
+    concat(left,
+        concat(treeMapLevel(subtree,
+        (n) => n + level),
+        right))
+}
+
+def treeFoldRec[T, K](t: Tree[T], f: (T, List[K]) => K, index: Int): K = {
+    def root = List.get(t, index)
+    def children = childrenIndexed(t, index)
+    def childResults: List[K] =
+        List.map(children, (n) => treeFoldRec(t, f, n._1))
+
+    f(root._1, childResults)
+}
+
+def treeFold[T, K](t: Tree[T], f: (T, List[K]) => K): K = 
+    treeFoldRec(t, f, 0)
+
+def depth[T](t: Tree[T]): Int =
+    treeFold(t,
+        (n, children) => 1 + List.fold(children, 0, (acc, n) => max(acc, n))
+    )
+
+type StackEntry[T] = Map[String, T]
+type Stack[T] = List[StackEntry[T]]
+
+def stackPop[T](stack: Stack[T]): Stack[T] =
+    List.tail(stack)
+
+def stackCurrent[T](stack: Stack[T]): StackEntry[T] =
+    List.head(stack)
+
+def stackSet[T](stack: Stack[T], key: String, value: T): Stack[T] =
+    List.prepend(
+        Map.add(stackCurrent(stack), key, value),
+        stackPop(stack)
+    )
+
+def stackEmpty[T](stack: Stack[T]): Bool =
+    List.isEmpty(stack)
+
+def stackGet[T](stack: Stack[T], key: String): Option[T] =
+    if stackEmpty(stack)
+    then None
+    else {
+        if Map.contains(stackCurrent(stack), key)
+        then Some(Map.get(stackCurrent(stack), key))
+        else stackGet(stackPop(stack), key)
+    }
+
+def stackContains[T](stack: Stack[T], key: String): Bool =
+    if stackEmpty(stack)
+    then false
+    else {
+        Map.contains(stackCurrent(stack), key)
+            && stackContains(stackPop(stack), key)
+    }
+
+def stackNil[T]: Stack[T] = List.empty()
+
+type AExprType = Int
+def ANum = 1
+def APlus = 2
+def AMinus = 3
+def AMult = 4
+
+type BExprType = Int
+def BTrue = 1
+def BFalse = 2
+def BEq = 3
+def BLe = 4
+def BNot = 5
+def BAnd = 6
+
+type LexicalClass = Int
+def AExpr = 1
+def BExpr = 2
+def DataInt = 3
+def DataString = 4
+def DataBool = 5
+
+type DataType = Int
+def dataTypeNone = 1
+def dataTypeInt = 2
+def dataTypeString = 3
+def dataTypeBool = 4
+
+type ProgData = {dataType: DataType, intVal: Option[Int],
+                 strVal: Option[String], boolVal: Option[Bool]}
+def progDataInt(x: Int): ProgData =
+    {dataType = dataTypeInt, intVal = Some(x), strVal = None, boolVal = None}
+def progDataString(x: String): ProgData =
+    {dataType = dataTypeString, intVal = None, strVal = Some(x), boolVal = None}
+def progDataBool(x: Bool): ProgData =
+    {dataType = dataTypeBool, intVal = None, strVal = None, boolVal = Some(x)}
+def progDataNone(): ProgData =
+    {dataType = dataTypeNone, intVal = None, strVal = None, boolVal = None}
+def getIntVal(x: ProgData): Int =
+    if x.dataType == dataTypeInt then getSome(x.intVal) else getSome(None)
+def getStringVal(x: ProgData): String =
+    if x.dataType == dataTypeString then getSome(x.strVal) else getSome(None)
+def getBoolVal(x: ProgData): Bool =
+    if x.dataType == dataTypeBool then getSome(x.boolVal) else getSome(None)
+
+type ASTEntry = {lexClass: LexicalClass,
+                 exprType: Int,
+                 strVal: Option[String],
+                 intVal: Option[Int],
+                 boolVal: Option[Bool]}
+def astAExprOp(typ: AExprType): ASTEntry =
+    {lexClass = AExpr, exprType = typ, strVal = None, intVal = None,
+     boolVal = None}
+def astAExprNum(x: Int): ASTEntry =
+    {lexClass = AExpr, exprType = ANum, strVal = None, intVal = Some(x),
+     boolVal = None}
+
+def astBExprOp(typ: BExprType): ASTEntry =
+    {lexClass = BExpr, exprType = typ, strVal = None, intVal = None,
+     boolVal = None}
+
+type AST = Tree[ASTEntry]
+
+def plusExpr: AST =
+    list5(
+        (astAExprOp(APlus), 0),
+        (astAExprNum(1), 1),
+        (astAExprOp(AMult), 1),
+        (astAExprNum(2), 2),
+        (astAExprNum(3), 2)
+    )
+
+def evalExpr(expr: AST, stack: Stack[Int]): ProgData = {
+    def evalExprRec(index: Int, stack: Stack[Int]): ProgData = {
+        def root = List.get(expr, index)
+        def children = childrenIndexes(expr, index)
+
+        if root._1.lexClass == AExpr then
+            if root._1.exprType == ANum then
+                progDataInt(getSome(root._1.intVal))
+            else if root._1.exprType == APlus then
+                progDataInt(
+                    getIntVal(evalExprRec(List.get(children, 0), stack)) +
+                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                )
+            else if root._1.exprType == AMult then
+                progDataInt(
+                    getIntVal(evalExprRec(List.get(children, 0), stack)) *
+                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                )
+            else if root._1.exprType == AMinus then
+                progDataInt(
+                    getIntVal(evalExprRec(List.get(children, 0), stack)) -
+                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                )
+            else
+                getSome(None)
+        else if root._1.lexClass == BExpr then
+            if root._1.exprType == BTrue then
+                progDataBool(true)
+            else if root._1.exprType == BFalse then
+                progDataBool(false)
+            else if root._1.exprType == BEq then
+                progDataBool(
+                    getIntVal(evalExprRec(List.get(children, 0), stack)) ==
+                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                )
+            else if root._1.exprType == BLe then
+                progDataBool(
+                    getIntVal(evalExprRec(List.get(children, 0), stack)) <=
+                    getIntVal(evalExprRec(List.get(children, 1), stack))
+                )
+            else if root._1.exprType == BNot then
+                progDataBool(
+                    !getBoolVal(evalExprRec(List.get(children, 0), stack))
+                )
+            else if root._1.exprType == BAnd then
+                progDataBool(
+                    getBoolVal(evalExprRec(List.get(children, 0), stack)) &&
+                    getBoolVal(evalExprRec(List.get(children, 1), stack))
+                )
+            else
+                getSome(None)
+        else
+            getSome(None)
+    }
+
+    evalExprRec(0, stack)
+}
+
+def mulExpr = list3(
+    (astAExprOp(AMult), 0),
+    (astAExprNum(2), 1),
+    (astAExprNum(3), 1)
+)
+
+out evalExpr(mulExpr, stackNil[Int])
+out evalExpr(plusExpr, stackNil[Int])
+out filterList(
+    list7(0, 1, 2, 3, 4, 5, 6), 
+    (n) => n >= 2 && n <= 4
+)
+out splitList(list5(1, 2, 3, 4, 5), 3)
+out takeWhile(list5(1, 2, 3, 4, 5), (n) => n < 4)
+out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 0)
+out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 1)
+out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
+out removeSubtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
+out insert(
+    removeSubtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3),
+    subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3),
+    3
+    )
+out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 6)
+out children(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
+out children(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 1)
+out depth(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)))
