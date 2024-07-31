@@ -6,6 +6,7 @@ enum AExpr {
     APlus(Box<AExpr>, Box<AExpr>),
     AMinus(Box<AExpr>, Box<AExpr>),
     AMult(Box<AExpr>, Box<AExpr>),
+    AVar(String),
 }
 
 enum BExpr {
@@ -28,7 +29,7 @@ type VarStackImp = VecDeque<HashMap<String, i32>>;
 
 trait VarStack {
     fn empty() -> Self;
-    fn get(&self, x: &String) -> i32;
+    fn lookup(&self, x: &String) -> i32;
     fn set(&mut self, x: String, n: i32);
     fn tail(&self) -> Self;
     fn pop(&mut self);
@@ -39,7 +40,7 @@ impl VarStack for VarStackImp {
         return VecDeque::from(vec![HashMap::new()]);
     }
 
-    fn get(&self, x: &String) -> i32 {
+    fn lookup(&self, x: &String) -> i32 {
         for map in self.iter().rev() {
             if map.contains_key(x) {
                 return map[x];
@@ -73,28 +74,25 @@ impl VarStack for VarStackImp {
 
 trait Evaluatable<T> {
     fn eval(&self, vs: &mut VarStackImp) ->
-        (T, VarStackImp);
+        T;
 }
 
 impl Evaluatable<i32> for AExpr {
     fn eval(&self, vs: &mut VarStackImp) ->
-        (i32, VarStackImp) {
+        i32 {
         match self {
-            AExpr::ANum(n) => (*n, vs.clone()),
+            AExpr::ANum(n) => *n,
             AExpr::APlus(a1, a2) => {
-                let (n1, mut vs1) = a1.eval(vs);
-                let (n2, vs2) = a2.eval(&mut vs1);
-                (n1 + n2, vs2)
+                a1.eval(vs) + a2.eval(vs)
             },
             AExpr::AMinus(a1, a2) => {
-                let (n1, mut vs1) = a1.eval(vs);
-                let (n2, vs2) = a2.eval(&mut vs1);
-                (n1 - n2, vs2)
+                a1.eval(vs) - a2.eval(vs)
             },
             AExpr::AMult(a1, a2) => {
-                let (n1, mut vs1) = a1.eval(vs);
-                let (n2, vs2) = a2.eval(&mut vs1);
-                (n1 * n2, vs2)
+                a1.eval(vs) * a2.eval(vs)
+            },
+            AExpr::AVar(x) => {
+                vs.lookup(x)
             },
         }
     }
@@ -102,28 +100,21 @@ impl Evaluatable<i32> for AExpr {
 
 impl Evaluatable<bool> for BExpr {
     fn eval(&self, vs: &mut VarStackImp) ->
-        (bool, VarStackImp) {
+        bool {
         match self {
-            BExpr::BTrue => (true, vs.clone()),
-            BExpr::BFalse => (false, vs.clone()),
+            BExpr::BTrue => true,
+            BExpr::BFalse => false,
             BExpr::BEq(a1, a2) => {
-                let (n1, mut vs1) = a1.eval(vs);
-                let (n2, vs2) = a2.eval(&mut vs1);
-                (n1 == n2, vs2)
+                a1.eval(vs) == a2.eval(vs)
             },
             BExpr::BLe(a1, a2) => {
-                let (n1, mut vs1) = a1.eval(vs);
-                let (n2, vs2) = a2.eval(&mut vs1);
-                (n1 <= n2, vs2)
+                a1.eval(vs) <= a2.eval(vs)
             },
             BExpr::BNot(b) => {
-                let (b1, vs1) = b.eval(vs);
-                (!b1, vs1)
+                !b.eval(vs)
             },
             BExpr::BAnd(b1, b2) => {
-                let (b1, mut vs1) = b1.eval(vs);
-                let (b2, vs2) = b2.eval(&mut vs1);
-                (b1 && b2, vs2)
+                b1.eval(vs) && b2.eval(vs)
             },
         }
     }
@@ -132,32 +123,27 @@ impl Evaluatable<bool> for BExpr {
 
 impl Evaluatable<()> for Com {
     fn eval(&self, vs: &mut VarStackImp) ->
-        ((), VarStackImp) {
+        () {
         match self {
             Com::CAss(x, a) => {
-                let (n, mut vs1) = a.eval(vs);
-                vs1.set(x.clone(), n);
-                ((), vs1)
+                let n = a.eval(vs);
+                vs.set(x.clone(), n);
             },
             Com::CSeq(c1, c2) => {
-                let (_, mut vs1) = c1.eval(vs);
-                c2.eval(&mut vs1)
+                c1.eval(vs);
+                c2.eval(vs);
             },
             Com::CIf(b, c1, c2) => {
-                let (b1, mut vs1) = b.eval(vs);
-                if b1 {
-                    c1.eval(&mut vs1)
+                if b.eval(vs) {
+                    c1.eval(vs)
                 } else {
-                    c2.eval(&mut vs1)
+                    c2.eval(vs)
                 }
             },
             Com::CWhile(b, c) => {
-                let (b1, mut vs1) = b.eval(vs);
-                if b1 {
-                    let (_, mut vs2) = c.eval(&mut vs1);
-                    c.eval(&mut vs2)
-                } else {
-                    ((), vs1)
+                if b.eval(vs) {
+                    c.eval(vs);
+                    self.eval(vs);
                 }
             },
         }
@@ -172,6 +158,16 @@ fn main() {
             Box::new(AExpr::ANum(3)),
         )),
     );
+    let plus_expr2 = AExpr::APlus(
+        Box::new(AExpr::ANum(1)),
+        Box::new(AExpr::AMult(
+            Box::new(AExpr::AVar("x".to_string())),
+            Box::new(AExpr::ANum(3)),
+        )),
+    );
+    let mut stack2 = VarStackImp::from(vec![HashMap::from([("x".to_string(), 2)])]);
     println!("1 + 2 * 3 = {}",
-        plus_expr.eval(&mut VarStackImp::empty()).0);
+        plus_expr.eval(&mut VarStackImp::empty()));
+    println!("1 + x * 3 = {}",
+        plus_expr2.eval(&mut stack2));
 }
