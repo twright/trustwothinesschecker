@@ -297,6 +297,7 @@ def plusExpr: AST =
         (astAExprNum(3), 2)
     )
 
+liftable
 def evalExpr(expr: AST, stack: Stack[Int]): (ProgData, Stack[Int]) = {
     def evalExprRec(index: Int, stack: Stack[Int]): (ProgData, Stack[Int]) = {
         def root = List.get(expr, index)
@@ -440,25 +441,33 @@ def stack1: Stack[Int] = list1(
     Map.add(Map.empty(), "x", 2)
 )
 
-out evalExpr(plusExpr2, stack1)
-out evalExpr(mulExpr, stackNil[Int])
-out evalExpr(plusExpr, stackNil[Int])
-out filterList(
-    list7(0, 1, 2, 3, 4, 5, 6), 
-    (n) => n >= 2 && n <= 4
-)
-out splitList(list5(1, 2, 3, 4, 5), 3)
-out takeWhile(list5(1, 2, 3, 4, 5), (n) => n < 4)
-out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 0)
-out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 1)
-out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
-out removeSubtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
-out insert(
-    removeSubtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3),
-    subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3),
-    3
-    )
-out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 6)
-out children(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
-out children(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 1)
-out depth(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)))
+in prog: Events[AST]
+in stack: Events[Stack[Int]]
+
+#out plusExpr2
+#out mulExpr
+#out plusExpr
+#out evalExpr(plusExpr2, stack1)
+#out evalExpr(mulExpr, stackNil[Int])
+#out evalExpr(plusExpr, stackNil[Int])
+#out filterList(
+    #list7(0, 1, 2, 3, 4, 5, 6), 
+    #(n) => n >= 2 && n <= 4
+#)
+#out splitList(list5(1, 2, 3, 4, 5), 3)
+#out takeWhile(list5(1, 2, 3, 4, 5), (n) => n < 4)
+#out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 0)
+#out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 1)
+#out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
+#out removeSubtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
+#out insert(
+    #removeSubtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3),
+    #subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3),
+    #3
+    #)
+#out subtree(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 6)
+#out children(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 3)
+#out children(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)), 1)
+#out depth(list7((0, 0), (1,0), (2,1), (3,1), (4,2), (5,1), (6,1)))
+#out prog
+out evalExpr(prog, stack)

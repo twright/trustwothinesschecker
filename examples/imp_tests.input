@@ -1,0 +1,6 @@
+0: stack = List()
+0: prog = List(({boolVal = None, exprType = 2, intVal = None, lexClass = 1, strVal = None}, 0), ({boolVal = None, exprType = 1, intVal = Some(1), lexClass = 1, strVal = None}, 1), ({boolVal = None, exprType = 4, intVal = None, lexClass = 1, strVal = None}, 1), ({boolVal = None, exprType = 1, intVal = Some(2), lexClass = 1, strVal = None}, 2), ({boolVal = None, exprType = 1, intVal = Some(3), lexClass = 1, strVal = None}, 2))
+1: stack = List()
+1: prog = List(({boolVal = None, exprType = 4, intVal = None, lexClass = 1, strVal = None}, 0), ({boolVal = None, exprType = 1, intVal = Some(2), lexClass = 1, strVal = None}, 1), ({boolVal = None, exprType = 1, intVal = Some(3), lexClass = 1, strVal = None}, 1))
+2: stack = List(Map("x" -> 2))
+2: prog = List(({boolVal = None, exprType = 2, intVal = None, lexClass = 1, strVal = None}, 0), ({boolVal = None, exprType = 1, intVal = Some(1), lexClass = 1, strVal = None}, 1), ({boolVal = None, exprType = 4, intVal = None, lexClass = 1, strVal = None}, 1), ({boolVal = None, exprType = 5, intVal = None, lexClass = 1, strVal = Some("x")}, 2), ({boolVal = None, exprType = 1, intVal = Some(3), lexClass = 1, strVal = None}, 2))
