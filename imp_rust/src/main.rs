@@ -31,6 +31,8 @@ trait VarStack {
     fn empty() -> Self;
     fn lookup(&self, x: &String) -> i32;
     fn set(&mut self, x: String, n: i32);
+    fn assign_new(&mut self, x: String, n: i32);
+    fn grow(&mut self);
     fn tail(&self) -> Self;
     fn pop(&mut self);
 }
@@ -59,6 +61,15 @@ impl VarStack for VarStackImp {
 
         self[0].entry(x).or_insert(n);
         return;
+    }
+
+    fn assign_new(&mut self, x: String, n: i32) {
+        self[0].entry(x).or_insert(n);
+        return;
+    }
+
+    fn grow(&mut self) {
+        self.push_front(HashMap::new());
     }
 
     fn tail(&self) -> Self {
