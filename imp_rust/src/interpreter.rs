@@ -116,7 +116,7 @@ impl Evaluatable<()> for Com {
         match self {
             Com::CAss(x, a) => {
                 let n = a.eval(vs);
-                vs.set(x.clone(), n);
+                vs.assign_new(x.clone(), n);
             },
             Com::CSeq(c1, c2) => {
                 c1.eval(vs);
@@ -134,6 +134,15 @@ impl Evaluatable<()> for Com {
                     c.eval(vs);
                     self.eval(vs);
                 }
+            },
+            Com::CBlock(c) => {
+                vs.grow();
+                c.eval(vs);
+                vs.pop();
+            },
+            Com::CUpd(x, a) => {
+                let n = a.eval(vs);
+                vs.set(x.clone(), n);
             },
         }
     }

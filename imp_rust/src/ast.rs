@@ -17,6 +17,8 @@ pub enum BExpr {
 
 pub enum Com {
     CAss(String, Box<AExpr>),
+    CUpd(String, Box<AExpr>),
+    CBlock(Box<Com>),
     CSeq(Box<Com>, Box<Com>),
     CIf(Box<BExpr>, Box<Com>, Box<Com>),
     CWhile(Box<BExpr>, Box<Com>),

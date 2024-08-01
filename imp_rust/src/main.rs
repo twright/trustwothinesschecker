@@ -48,4 +48,15 @@ fn main() {
             println!("Error parsing expression: {:?}", e);
         }
     }
+
+    let parsed_expr3 = parser::aexpr(&mut "1 - 2 - 3".as_ref());
+    match parsed_expr3 {
+        Ok(ast) => {
+            println!("Parsed ast");
+            println!("Evaluated: {}", ast.eval(&mut VarStackImp::empty()));
+        },
+        Err(e) => {
+            println!("Error parsing expression: {:?}", e);
+        }
+    }
 }
