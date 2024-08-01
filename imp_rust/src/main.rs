@@ -23,7 +23,7 @@ fn main() {
     );
     println!("1 + 2 * 3 = {}",
         plus_expr.eval(&mut VarStackImp::empty()));
-    let mut stack2 = VarStackImp::from(vec![HashMap::from([("x".to_string(), 2)])]);
+    let mut stack2 = VarStackImp::from(vec![HashMap::from([("x".to_string(), ProgData::TInt(2))])]);
     println!("1 + x * 3 = {}",
         plus_expr2.eval(&mut stack2));
 
