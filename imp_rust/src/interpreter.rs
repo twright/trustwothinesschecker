@@ -88,8 +88,7 @@ impl Evaluatable<i32> for AExpr {
 }
 
 impl Evaluatable<bool> for BExpr {
-    fn eval(&self, vs: &mut VarStackImp) ->
-        bool {
+    fn eval(&self, vs: &mut VarStackImp) -> bool {
         match self {
             BExpr::BTrue => true,
             BExpr::BFalse => false,
@@ -107,7 +106,6 @@ impl Evaluatable<bool> for BExpr {
             },
         }
     }
-    
 }
 
 impl Evaluatable<()> for Com {
