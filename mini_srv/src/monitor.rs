@@ -187,7 +187,7 @@ fn constraint_stream_to_outputs<'a>(
     res
 }
 
-struct ConstraintBasedMonitor {
+pub struct ConstraintBasedMonitor {
     input_streams: ValStreamTree,
     constraints: SExprConstraintStore<VarName>,
     input_vars: Vec<VarName>,
@@ -196,7 +196,7 @@ struct ConstraintBasedMonitor {
 }
 
 impl ConstraintBasedMonitor {
-    fn new(
+    pub fn new(
         input_vars: Vec<VarName>,
         output_vars: Vec<VarName>,
         constraints: SExprConstraintStore<VarName>,
@@ -210,7 +210,7 @@ impl ConstraintBasedMonitor {
         }
     }
 
-    fn publish_inputs(&mut self, input: &BTreeMap<VarName, i64>) {
+    pub fn publish_inputs(&mut self, input: &BTreeMap<VarName, i64>) {
         for k in input.keys() {
             if !self.input_vars.contains(k) {
                 panic!("Unexpected input variable");
@@ -219,16 +219,33 @@ impl ConstraintBasedMonitor {
         self.input_streams.publish_inputs(input);
     }
 
-    fn iter_constraints(&self) -> MonitorConstraintIter<'_> {
+    pub fn iter_constraints(
+        &self,
+    ) -> impl Iterator<Item = SExprConstraintStore<IndexedVarName>> + '_ {
         MonitorConstraintIter::new(self, &self.input_streams)
     }
 
-    fn iter_outputs(&self) -> BTreeMap<VarName, Box<dyn Iterator<Item = i64> + '_>> {
+    pub fn iter_outputs(&self) -> impl Iterator<Item = BTreeMap<VarName, i64>> + '_ {
+        self.iter_constraints().enumerate().map(|(i, cs)| {
+            let mut res = BTreeMap::new();
+            for k in &self.output_vars {
+                match cs[IndexedVarName(k.0.clone(), i.try_into().unwrap())] {
+                    SExpr::Num(val) => {
+                        res.insert(k.clone(), val);
+                    }
+                    _ => panic!("Expected solved constraint"),
+                }
+            }
+            res
+        })
+    }
+
+    pub fn iter_output_iters(&self) -> BTreeMap<VarName, Box<dyn Iterator<Item = i64> + '_>> {
         constraint_stream_to_outputs(&self.output_vars, Box::new(self.iter_constraints()))
     }
 }
 
-struct MonitorConstraintIter<'a> {
+pub struct MonitorConstraintIter<'a> {
     monitor: &'a ConstraintBasedMonitor,
     constraints: SExprConstraintStore<IndexedVarName>,
     input_stream_iter: Box<dyn Iterator<Item = SExprConstraintStore<IndexedVarName>>>,

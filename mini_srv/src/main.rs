@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 mod ast;
 mod parser;
@@ -55,4 +55,39 @@ fn main() {
     println!("{}", cs2);
     solve_constraints(&mut cs2);
     println!("{}", cs2);
+
+    let cs3 = SExprConstraintStore {
+        resolved: vec![],
+        unresolved: vec![(
+            VarName("z".into()),
+            SExpr::Plus(
+                Box::new(SExpr::Var(VarName("x".into()))),
+                Box::new(SExpr::Var(VarName("y".into()))),
+            ),
+        )],
+    };
+    let inputs1 =
+        BTreeMap::from_iter(vec![(VarName("x".into()), 1), (VarName("y".into()), 2)].into_iter());
+    let inputs2 =
+        BTreeMap::from_iter(vec![(VarName("x".into()), 3), (VarName("y".into()), 4)].into_iter());
+    let mut monitor = ConstraintBasedMonitor::new(
+        vec![VarName("x".into()), VarName("y".into())],
+        vec![VarName("z".into())],
+        cs3,
+    );
+    for (cs, i) in monitor.iter_constraints().zip(0..3) {
+        println!("Step {}:\n{}", i, cs);
+    }
+    monitor.publish_inputs(&inputs1);
+    for (cs, i) in monitor.iter_constraints().zip(0..3) {
+        println!("Step {}:\n{}", i, cs);
+    }
+    monitor.publish_inputs(&inputs2);
+    for (cs, i) in monitor.iter_constraints().zip(0..3) {
+        println!("Step {}:\n{}", i, cs);
+    }
+
+    for (i, x) in monitor.iter_outputs().enumerate() {
+        println!("z[{}] = {:?}", i, x[&VarName("z".into())]);
+    }
 }
