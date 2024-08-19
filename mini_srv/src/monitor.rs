@@ -88,103 +88,21 @@ impl ValStreamCollection for ValStreamTree {
 
 fn inputs_to_constraint_stream(
     inputs: &dyn ValStreamCollection,
-) -> Box<dyn Iterator<Item = SExprConstraintStore<IndexedVarName>>> {
-    Box::new(inputs.iter().zip(0..).map(|(input, time)| {
+) -> impl Iterator<Item = SExprConstraintStore<IndexedVarName>> {
+    Box::new(inputs.iter().enumerate().map(|(time, input)| {
         SExprConstraintStore {
             resolved: input
                 .iter()
-                .map(|(k, v)| (IndexedVarName(k.0.clone(), time), SExpr::Num(*v)))
+                .map(|(k, v)| {
+                    (
+                        IndexedVarName(k.0.clone(), time.try_into().unwrap()),
+                        SExpr::Num(*v),
+                    )
+                })
                 .collect(),
             unresolved: Vec::new(),
         }
     }))
-}
-
-struct CombinedConstraintIter<'a> {
-    iter: Box<dyn Iterator<Item = SExprConstraintStore<IndexedVarName>> + 'a>,
-    child_values: Vec<Vec<i64>>,
-    keys: Vec<VarName>,
-    index: usize,
-}
-
-fn combined_iter_explore(iter: &mut CombinedConstraintIter, target_index: usize) {
-    for i in iter.index..target_index {
-        let new_values = iter.iter.next();
-
-        match new_values {
-            Some(new_values) => {
-                iter.child_values.push(
-                    iter.keys
-                        .iter()
-                        .map(|k| {
-                            match new_values[IndexedVarName(k.0.clone(), i.try_into().unwrap())] {
-                                SExpr::Num(val) => val,
-                                _ => panic!("Expected solved constraint"),
-                            }
-                        })
-                        .collect(),
-                );
-                iter.index += 1;
-            }
-            None => {
-                return;
-            }
-        }
-    }
-}
-
-struct SingleConstraintIter<'a> {
-    parent: Rc<RefCell<CombinedConstraintIter<'a>>>,
-    index: usize,
-    child_key: VarName,
-}
-
-impl<'a> Iterator for SingleConstraintIter<'a> {
-    type Item = i64;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut parent = self.parent.borrow_mut();
-        let child_index = parent
-            .keys
-            .iter()
-            .position(|x| x == &self.child_key)
-            .unwrap();
-        combined_iter_explore(&mut parent, self.index);
-
-        match parent.child_values.get(self.index) {
-            Some(child_values) => {
-                let res = child_values[child_index];
-                self.index += 1;
-                Some(res)
-            }
-            None => None,
-        }
-    }
-}
-
-fn constraint_stream_to_outputs<'a>(
-    output_var_names: &Vec<VarName>,
-    constraints: Box<dyn Iterator<Item = SExprConstraintStore<IndexedVarName>> + 'a>,
-) -> BTreeMap<VarName, Box<dyn Iterator<Item = i64> + 'a>> {
-    let mut res: BTreeMap<VarName, Box<dyn Iterator<Item = i64>>> = BTreeMap::new();
-
-    let combined_iter = Rc::new(RefCell::new(CombinedConstraintIter {
-        iter: Box::new(constraints),
-        child_values: Vec::new(),
-        keys: output_var_names.clone(),
-        index: 0,
-    }));
-
-    for k in output_var_names {
-        let output_iter = SingleConstraintIter {
-            parent: combined_iter.clone(),
-            index: 0,
-            child_key: k.clone(),
-        };
-        res.insert(k.clone(), Box::new(output_iter));
-    }
-
-    res
 }
 
 pub struct ConstraintBasedMonitor {
@@ -216,6 +134,7 @@ impl ConstraintBasedMonitor {
                 panic!("Unexpected input variable");
             }
         }
+        self.input_index += 1;
         self.input_streams.publish_inputs(input);
     }
 
@@ -226,7 +145,7 @@ impl ConstraintBasedMonitor {
     }
 
     pub fn iter_outputs(&self) -> impl Iterator<Item = BTreeMap<VarName, i64>> + '_ {
-        self.iter_constraints().enumerate().map(|(i, cs)| {
+        self.iter_constraints().enumerate().map(move |(i, cs)| {
             let mut res = BTreeMap::new();
             for k in &self.output_vars {
                 match cs[IndexedVarName(k.0.clone(), i.try_into().unwrap())] {
@@ -239,13 +158,9 @@ impl ConstraintBasedMonitor {
             res
         })
     }
-
-    pub fn iter_output_iters(&self) -> BTreeMap<VarName, Box<dyn Iterator<Item = i64> + '_>> {
-        constraint_stream_to_outputs(&self.output_vars, Box::new(self.iter_constraints()))
-    }
 }
 
-pub struct MonitorConstraintIter<'a> {
+struct MonitorConstraintIter<'a> {
     monitor: &'a ConstraintBasedMonitor,
     constraints: SExprConstraintStore<IndexedVarName>,
     input_stream_iter: Box<dyn Iterator<Item = SExprConstraintStore<IndexedVarName>>>,
@@ -260,7 +175,7 @@ impl<'a> MonitorConstraintIter<'a> {
                 resolved: Vec::new(),
                 unresolved: Vec::new(),
             },
-            input_stream_iter: inputs_to_constraint_stream(input_streams),
+            input_stream_iter: Box::new(inputs_to_constraint_stream(input_streams)),
             index: 0,
         }
     }
