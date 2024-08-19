@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, ops::Index};
 
 use crate::ast::*;
 
@@ -7,6 +7,26 @@ pub type SExprConstraint<VarT> = (VarT, SExpr<VarT>);
 pub struct SExprConstraintStore<VarT> {
     pub resolved: Vec<SExprConstraint<VarT>>,
     pub unresolved: Vec<SExprConstraint<VarT>>,
+}
+
+impl<VarT: Eq> Index<VarT> for SExprConstraintStore<VarT> {
+    type Output = SExpr<VarT>;
+
+    fn index(&self, index: VarT) -> &Self::Output {
+        for (var, sexpr) in self.resolved.iter() {
+            if index == *var {
+                return sexpr;
+            }
+        }
+
+        for (var, sexpr) in self.unresolved.iter() {
+            if index == *var {
+                return sexpr;
+            }
+        }
+
+        panic!("Variable not found in constraint store");
+    }
 }
 
 impl<VarT: Display> Display for SExprConstraintStore<VarT> {
@@ -143,7 +163,7 @@ fn to_indexed_expr(s: &SExpr<VarName>, current_index: i64) -> SExpr<IndexedVarNa
     }
 }
 
-fn to_indexed_constraints(
+pub fn to_indexed_constraints(
     cs: &SExprConstraintStore<VarName>,
     current_index: i64,
 ) -> SExprConstraintStore<IndexedVarName> {
@@ -354,7 +374,7 @@ pub fn solve_constraints<VarT: Eq + Clone + IndexableVar>(mut cs: &mut SExprCons
     }
 }
 
-fn add_constraints<VarT: Clone>(
+pub fn add_constraints<VarT: Clone>(
     mut cs: &mut SExprConstraintStore<VarT>,
     cs_new: &SExprConstraintStore<VarT>,
 ) {
