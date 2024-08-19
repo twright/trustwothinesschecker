@@ -102,7 +102,6 @@ fn bfalse(s: &mut &str) -> PResult<BExpr> {
         literal("false"),
         whitespace,
     ).map(|_| BExpr::BFalse).parse_next(s);
-    
 }
 
 fn beq(s: &mut &str) -> PResult<BExpr> {
