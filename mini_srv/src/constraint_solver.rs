@@ -1,31 +1,87 @@
-use std::{fmt::Display, ops::Index};
+use std::{fmt::Display, mem};
 
 use crate::ast::*;
 
 pub type SExprConstraint<VarT> = (VarT, SExpr<VarT>);
+pub type SExprConstraintSolved<VarT> = (VarT, StreamData);
 
 pub struct SExprConstraintStore<VarT> {
-    pub resolved: Vec<SExprConstraint<VarT>>,
+    pub resolved: Vec<SExprConstraintSolved<VarT>>,
     pub unresolved: Vec<SExprConstraint<VarT>>,
 }
 
-impl<VarT: Eq> Index<VarT> for SExprConstraintStore<VarT> {
-    type Output = SExpr<VarT>;
+impl<VarT> Default for SExprConstraintStore<VarT> {
+    fn default() -> Self {
+        SExprConstraintStore {
+            resolved: Vec::new(),
+            unresolved: Vec::new(),
+        }
+    }
+}
 
-    fn index(&self, index: VarT) -> &Self::Output {
-        for (var, sexpr) in self.resolved.iter() {
-            if index == *var {
-                return sexpr;
+impl<VarT: Clone + Eq> SExprConstraintStore<VarT> {
+    pub fn resolved_exprs(&self) -> Vec<SExprConstraint<VarT>> {
+        self.resolved
+            .iter()
+            .map(|(v, s)| (v.clone(), SExpr::Val(s.clone())))
+            .collect()
+    }
+
+    fn sort_resolved(&mut self) {
+        for (v, sexpr) in mem::take(&mut self.unresolved).into_iter() {
+            if let SExpr::Val(x) = sexpr {
+                self.resolved.push((v, x));
+            } else {
+                self.unresolved.push((v, sexpr));
+            }
+        }
+
+        for x in self.unresolved.iter() {
+            assert!(!is_constraint_resolved(x));
+        }
+    }
+
+    pub fn add_constraint<'a>(&'a mut self, (v, s): SExprConstraint<VarT>) -> &'a mut Self {
+        self.unresolved.push((v, s));
+        self.sort_resolved();
+        self
+    }
+
+    pub fn add_constraints<'a>(&'a mut self, cs: Vec<SExprConstraint<VarT>>) -> &'a mut Self {
+        self.unresolved.extend(cs);
+        self.sort_resolved();
+        self
+    }
+
+    pub fn add_resolved<'a>(&'a mut self, (v, s): SExprConstraintSolved<VarT>) -> &'a mut Self {
+        self.resolved.push((v, s));
+        self
+    }
+
+    pub fn add_resolveds<'a>(&'a mut self, cs: Vec<SExprConstraintSolved<VarT>>) -> &'a mut Self {
+        self.resolved.extend(cs);
+        self
+    }
+
+    pub fn extend<'a>(&'a mut self, cs: SExprConstraintStore<VarT>) -> &'a mut Self {
+        self.add_constraints(cs.unresolved)
+            .add_resolveds(cs.resolved)
+    }
+
+    pub fn match_var(&self, v: &VarT) -> Option<SExpr<VarT>> {
+        for (var, sexpr) in self.resolved_exprs().iter() {
+            if *v == *var {
+                return Some(sexpr.clone());
             }
         }
 
         for (var, sexpr) in self.unresolved.iter() {
-            if index == *var {
-                return sexpr;
+            if *v == *var {
+                return Some(sexpr.clone());
             }
         }
 
-        panic!("Variable not found in constraint store");
+        return None;
     }
 }
 
@@ -59,70 +115,14 @@ impl<VarT: Clone> Clone for SExprConstraintStore<VarT> {
     }
 }
 
-fn constraint_resolved<VarT>((_, s): &SExprConstraint<VarT>) -> bool {
-    sexpr_constant(s)
-}
-
-fn constraint_store_sort_resolved<VarT: Clone + Eq>(cs: &mut SExprConstraintStore<VarT>) {
-    let new_resolved: Vec<SExprConstraint<VarT>> = cs
-        .unresolved
-        .iter()
-        .filter(|c| constraint_resolved(c))
-        .cloned()
-        .collect();
-    cs.unresolved = cs
-        .unresolved
-        .iter()
-        .filter(|c| !new_resolved.contains(c))
-        .cloned()
-        .collect();
-    cs.resolved.extend(new_resolved);
-}
-
-fn constraint_store_sorted_resolved<VarT: Clone + Eq>(
-    cs: SExprConstraintStore<VarT>,
-) -> SExprConstraintStore<VarT> {
-    let new_resolved: Vec<SExprConstraint<VarT>> = cs
-        .unresolved
-        .iter()
-        .filter(|c| constraint_resolved(c))
-        .cloned()
-        .collect();
-    let new_unresolved: Vec<SExprConstraint<VarT>> = cs
-        .unresolved
-        .iter()
-        .filter(|c| !new_resolved.contains(c))
-        .cloned()
-        .collect();
-    SExprConstraintStore {
-        resolved: new_resolved,
-        unresolved: new_unresolved,
-    }
-}
-
-fn constraint_store_match<VarT: Clone + Eq>(
-    v: &VarT,
-    cs: &SExprConstraintStore<VarT>,
-) -> Option<SExpr<VarT>> {
-    for (var, sexpr) in cs.resolved.iter() {
-        if *v == *var {
-            return Some(sexpr.clone());
-        }
-    }
-
-    for (var, sexpr) in cs.unresolved.iter() {
-        if *v == *var {
-            return Some(sexpr.clone());
-        }
-    }
-
-    return None;
+fn is_constraint_resolved<VarT>((_, s): &SExprConstraint<VarT>) -> bool {
+    matches!(s, SExpr::Val(_))
 }
 
 fn to_indexed_bexpr(b: &BExpr<VarName>) -> BExpr<IndexedVarName> {
     use BExpr::*;
     match b {
-        Val(b) => Val(*b),
+        Val(b) => Val(b.clone()),
         Eq(a, c) => Eq(
             Box::new(to_indexed_expr(a, 0)),
             Box::new(to_indexed_expr(c, 0)),
@@ -137,10 +137,10 @@ fn to_indexed_bexpr(b: &BExpr<VarName>) -> BExpr<IndexedVarName> {
     }
 }
 
-fn to_indexed_expr(s: &SExpr<VarName>, current_index: i64) -> SExpr<IndexedVarName> {
+fn to_indexed_expr(s: &SExpr<VarName>, current_index: isize) -> SExpr<IndexedVarName> {
     use SExpr::*;
     match s {
-        Num(n) => Num(*n),
+        Val(n) => Val(n.clone()),
         Plus(a, b) => Plus(
             Box::new(to_indexed_expr(a, current_index)),
             Box::new(to_indexed_expr(b, current_index)),
@@ -154,7 +154,7 @@ fn to_indexed_expr(s: &SExpr<VarName>, current_index: i64) -> SExpr<IndexedVarNa
             Box::new(to_indexed_expr(b, current_index)),
         ),
         Var(VarName(v)) => Var(IndexedVarName(v.clone(), current_index)),
-        Index(s, i, c) => Index(Box::new(to_indexed_expr(s, current_index)), *i, *c),
+        Index(s, i, c) => Index(Box::new(to_indexed_expr(s, current_index)), *i, c.clone()),
         If(b, e1, e2) => If(
             Box::new(to_indexed_bexpr(b)),
             Box::new(to_indexed_expr(s, current_index)),
@@ -165,16 +165,13 @@ fn to_indexed_expr(s: &SExpr<VarName>, current_index: i64) -> SExpr<IndexedVarNa
 
 pub fn to_indexed_constraints(
     cs: &SExprConstraintStore<VarName>,
-    current_index: i64,
+    current_index: isize,
 ) -> SExprConstraintStore<IndexedVarName> {
-    let resolved: Vec<SExprConstraint<IndexedVarName>> = cs
+    let resolved: Vec<SExprConstraintSolved<IndexedVarName>> = cs
         .resolved
         .iter()
-        .map(|(v, s)| match v {
-            VarName(u) => (
-                IndexedVarName(u.clone(), current_index),
-                to_indexed_expr(s, current_index),
-            ),
+        .map(|(v, x)| match v {
+            VarName(u) => (IndexedVarName(u.clone(), current_index), x.clone()),
         })
         .collect();
     let unresolved: Vec<SExprConstraint<IndexedVarName>> = cs
@@ -192,35 +189,6 @@ pub fn to_indexed_constraints(
         unresolved,
     }
 }
-
-// Trait for indexing a variable producing a new SExpr
-pub trait IndexableVar {
-    fn index(&self, i: i64, c: i64) -> SExpr<Self>
-    where
-        Self: Sized;
-}
-
-impl IndexableVar for VarName {
-    // For unindexed variables, indexing just produces the same expression
-    fn index(&self, i: i64, c: i64) -> SExpr<VarName> {
-        SExpr::Index(Box::new(SExpr::Var(self.clone())), i, c)
-    }
-}
-
-impl IndexableVar for IndexedVarName {
-    // For indexed variables, we can actually attempt to change the index on the underlying variable
-    fn index(&self, i: i64, c: i64) -> SExpr<IndexedVarName> {
-        use SExpr::*;
-        match self {
-            // If the shifted index is positive, we can just shift the index
-            // attached to the variable
-            IndexedVarName(name, j) if j + i >= 0 => Var(IndexedVarName(name.clone(), j + i)),
-            // If not the indexed variable is replaced with the default value
-            IndexedVarName(_, _) => Num(c),
-        }
-    }
-}
-
 pub trait PartialEvaluable<VarT: Eq + Clone + IndexableVar> {
     fn partial_eval(&self, cs: &SExprConstraintStore<VarT>) -> Self;
 }
@@ -228,14 +196,18 @@ pub trait PartialEvaluable<VarT: Eq + Clone + IndexableVar> {
 impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
     fn partial_eval(&self, cs: &SExprConstraintStore<VarT>) -> Self {
         use SExpr::*;
+        use StreamData::*;
         match self {
-            Num(n) => Num(*n),
+            Val(s) => Val(s.clone()),
             Plus(a, b) => {
                 let a_s = a.partial_eval(cs);
                 let b_s = b.partial_eval(cs);
                 match (a_s, b_s) {
-                    (Num(n1), Num(n2)) => Num(n1 + n2),
-                    (Num(n1), b) => Plus(Box::new(b), Box::new(Num(n1))).partial_eval(cs),
+                    // TODO: Sort other datatypes after exprs
+                    (Val(Int(n1)), Val(Int(n2))) => Val(Int(n1 + n2)),
+                    (Val(Int(n1)), b1) => {
+                        Plus(Box::new(b1), Box::new(Val(Int(n1)))).partial_eval(cs)
+                    }
                     (Plus(a1, b1), c1) => {
                         Plus(a1, Box::new(Plus(b1, Box::new(c1)))).partial_eval(cs)
                     }
@@ -247,7 +219,7 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
                 let a_s = a.partial_eval(cs);
                 let b_s = b.partial_eval(cs);
                 match (a_s, b_s) {
-                    (Num(n1), Num(n2)) => Num(n1 - n2),
+                    (Val(Int(n1)), Val(Int(n2))) => Val(Int(n1 - n2)),
                     (a_ss, b_ss) => Minus(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
@@ -255,8 +227,10 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
                 let a_s = a.partial_eval(cs);
                 let b_s = b.partial_eval(cs);
                 match (a_s, b_s) {
-                    (Num(n1), Num(n2)) => Num(n1 * n2),
-                    (Num(n1), b) => Mult(Box::new(b.clone()), Box::new(Num(n1))).partial_eval(cs),
+                    (Val(Int(n1)), Val(Int(n2))) => Val(Int(n1 * n2)),
+                    (Val(Int(n1)), b1) => {
+                        Mult(Box::new(b1.clone()), Box::new(Val(Int(n1)))).partial_eval(cs)
+                    }
                     (Mult(a1, b1), c1) => {
                         Mult(a1, Box::new(Mult(b1, Box::new(c1.clone())))).partial_eval(cs)
                     }
@@ -277,12 +251,12 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
             Index(s, i, c) => {
                 let s_s = s.partial_eval(cs);
                 match s_s {
-                    Var(var) => var.index(*i, *c),
-                    Num(n) => Num(n),
-                    _ => Index(Box::new(s_s), *i, *c),
+                    Var(var) => var.index(*i, c),
+                    Val(Int(n)) => Val(Int(n)),
+                    _ => Index(Box::new(s_s), *i, c.clone()),
                 }
             }
-            Var(var) => match constraint_store_match(var, &cs) {
+            Var(var) => match cs.match_var(var) {
                 Some(sexpr) => sexpr,
                 None => Var(var.clone()),
             },
@@ -293,13 +267,14 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
 impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for BExpr<VarT> {
     fn partial_eval(&self, cs: &SExprConstraintStore<VarT>) -> Self {
         use BExpr::*;
+        use StreamData::*;
         match self {
             Val(bool) => Val(*bool),
             Eq(a, b) => {
                 let a_s = a.partial_eval(cs);
                 let b_s = b.partial_eval(cs);
                 match (a_s, b_s) {
-                    (SExpr::Num(x1), SExpr::Num(x2)) => Val(x1 == x2),
+                    (SExpr::Val(x1), SExpr::Val(x2)) => Val(x1 == x2),
                     (a_ss, b_ss) => Eq(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
@@ -307,7 +282,7 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for BExpr<VarT> {
                 let a_s = a.partial_eval(cs);
                 let b_s = b.partial_eval(cs);
                 match (a_s, b_s) {
-                    (SExpr::Num(x1), SExpr::Num(x2)) => Val(x1 <= x2),
+                    (SExpr::Val(Int(x1)), SExpr::Val(Int(x2))) => Val(x1 <= x2),
                     (a_ss, b_ss) => Le(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
@@ -342,42 +317,26 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for BExpr<VarT> {
     }
 }
 
-fn solve_step<VarT: Eq + Clone + IndexableVar>(
-    cs: &SExprConstraintStore<VarT>,
-) -> SExprConstraintStore<VarT> {
-    let unresolved = cs
-        .unresolved
-        .iter()
-        .map(|(v, s)| (v.clone(), s.partial_eval(cs)))
-        .collect();
-    let resolved = cs
-        .resolved
-        .iter()
-        .map(|(v, s)| (v.clone(), s.partial_eval(cs)))
-        .collect();
-    let mut cs = SExprConstraintStore {
-        unresolved: unresolved,
-        resolved: resolved,
-    };
-    constraint_store_sort_resolved(&mut cs);
-    cs
-}
+impl<VarT: Eq + Clone + IndexableVar> SExprConstraintStore<VarT> {
+    pub fn solve_step(&self) -> SExprConstraintStore<VarT> {
+        let unresolved = self
+            .unresolved
+            .iter()
+            .map(|(v, s)| (v.clone(), s.partial_eval(self)))
+            .collect();
 
-pub fn solve_constraints<VarT: Eq + Clone + IndexableVar>(mut cs: &mut SExprConstraintStore<VarT>) {
-    loop {
-        let cs_new = solve_step(cs);
+        SExprConstraintStore::default()
+            .add_constraints(unresolved)
+            .add_resolveds(self.resolved.clone())
+            .to_owned()
+    }
 
-        if cs_new == *cs {
+    pub fn solve(&mut self) {
+        let cs_new = self.solve_step();
+
+        if cs_new == *self {
             return;
         }
-        *cs = cs_new;
+        *self = cs_new;
     }
-}
-
-pub fn add_constraints<VarT: Clone>(
-    mut cs: &mut SExprConstraintStore<VarT>,
-    cs_new: &SExprConstraintStore<VarT>,
-) {
-    cs.resolved.extend(cs_new.resolved.clone());
-    cs.unresolved.extend(cs_new.unresolved.clone());
 }

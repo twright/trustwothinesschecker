@@ -13,12 +13,15 @@ fn main() {
         resolved: Vec::new(),
         unresolved: Vec::new(),
     };
-    let expr = SExpr::Plus(Box::new(SExpr::Num(1)), Box::new(SExpr::Num(2)));
+    let expr = SExpr::Plus(
+        Box::new(SExpr::Val(StreamData::Int(1))),
+        Box::new(SExpr::Val(StreamData::Int((2)))),
+    );
     println!("{}", expr.partial_eval(&cs));
     let mut cs1 = SExprConstraintStore {
         resolved: vec![
-            (IndexedVarName("x".into(), 0), SExpr::Num(1)),
-            (IndexedVarName("y".into(), 0), SExpr::Num(2)),
+            (IndexedVarName("x".into(), 0), StreamData::Int(1)),
+            (IndexedVarName("y".into(), 0), StreamData::Int(2)),
         ],
         unresolved: vec![(
             IndexedVarName("z".into(), 0),
@@ -29,12 +32,12 @@ fn main() {
         )],
     };
     println!("{}", cs1);
-    solve_constraints(&mut cs1);
+    cs1.solve();
     println!("{}", cs1);
     let mut cs2 = SExprConstraintStore {
         resolved: vec![
-            (IndexedVarName("x".into(), 0), SExpr::Num(1)),
-            (IndexedVarName("x".into(), 1), SExpr::Num(2)),
+            (IndexedVarName("x".into(), 0), StreamData::Int(1)),
+            (IndexedVarName("x".into(), 1), StreamData::Int(2)),
         ],
         unresolved: vec![(
             IndexedVarName("y".into(), 2),
@@ -42,18 +45,18 @@ fn main() {
                 Box::new(SExpr::Index(
                     Box::new(SExpr::Var(IndexedVarName("x".into(), 2))),
                     -1,
-                    0,
+                    StreamData::Int(0),
                 )),
                 Box::new(SExpr::Index(
                     Box::new(SExpr::Var(IndexedVarName("x".into(), 2))),
                     -2,
-                    0,
+                    StreamData::Int(0),
                 )),
             ),
         )],
     };
     println!("{}", cs2);
-    solve_constraints(&mut cs2);
+    cs2.solve();
     println!("{}", cs2);
 
     let cs3 = SExprConstraintStore {
@@ -67,9 +70,9 @@ fn main() {
         )],
     };
     let inputs1 =
-        BTreeMap::from_iter(vec![(VarName("x".into()), 1), (VarName("y".into()), 2)].into_iter());
+        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(1)), (VarName("y".into()), &StreamData::Int(2))].into_iter());
     let inputs2 =
-        BTreeMap::from_iter(vec![(VarName("x".into()), 3), (VarName("y".into()), 4)].into_iter());
+        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(3)), (VarName("y".into()), &StreamData::Int(4))].into_iter());
     let mut monitor = ConstraintBasedMonitor::new(
         vec![VarName("x".into()), VarName("y".into())],
         vec![VarName("z".into())],
