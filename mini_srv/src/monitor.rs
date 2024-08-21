@@ -196,7 +196,7 @@ impl<'a> Iterator for MonitorConstraintIter<'a> {
                 ));
 
                 // Solve the extended constraint system
-                self.constraints.solve();
+                self.constraints.solve(self.index);
 
                 // Increment the output index
                 self.index += 1;

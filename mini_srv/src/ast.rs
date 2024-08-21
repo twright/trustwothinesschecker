@@ -61,6 +61,9 @@ pub enum SExpr<VarT> {
     Minus(Box<SExpr<VarT>>, Box<SExpr<VarT>>),
     Mult(Box<SExpr<VarT>>, Box<SExpr<VarT>>),
     Var(VarT),
+
+    // Eval
+    Eval(Box<SExpr<VarT>>),
 }
 
 impl Display for VarName {
@@ -92,6 +95,7 @@ impl<VarT: Display> Display for SExpr<VarT> {
             SExpr::Minus(e1, e2) => write!(f, "({} - {})", e1, e2),
             SExpr::Mult(e1, e2) => write!(f, "({} * {})", e1, e2),
             SExpr::Var(v) => write!(f, "{}", v),
+            SExpr::Eval(e) => write!(f, "eval({})", e),
         }
     }
 }

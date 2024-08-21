@@ -17,7 +17,7 @@ fn main() {
         Box::new(SExpr::Val(StreamData::Int(1))),
         Box::new(SExpr::Val(StreamData::Int((2)))),
     );
-    println!("{}", expr.partial_eval(&cs));
+    println!("{}", expr.partial_eval(&cs, 0));
     let mut cs1 = SExprConstraintStore {
         resolved: vec![
             (IndexedVarName("x".into(), 0), StreamData::Int(1)),
@@ -32,7 +32,7 @@ fn main() {
         )],
     };
     println!("{}", cs1);
-    cs1.solve();
+    cs1.solve(0);
     println!("{}", cs1);
     let mut cs2 = SExprConstraintStore {
         resolved: vec![
@@ -56,7 +56,7 @@ fn main() {
         )],
     };
     println!("{}", cs2);
-    cs2.solve();
+    cs2.solve(0);
     println!("{}", cs2);
 
     let cs3 = SExprConstraintStore {
@@ -67,15 +67,22 @@ fn main() {
                 Box::new(SExpr::Var(VarName("x".into()))),
                 Box::new(SExpr::Var(VarName("y".into()))),
             ),
-        )],
+        ),
+        (
+            VarName("w".into()),
+            SExpr::Eval(Box::new(SExpr::Var(VarName("z".into())))),
+        ),
+        ],
     };
+    let binding = StreamData::Str("x + y".to_string());
     let inputs1 =
-        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(1)), (VarName("y".into()), &StreamData::Int(2))].into_iter());
+        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(1)), (VarName("y".into()), &StreamData::Int(2)), (VarName("s".into()), &binding), ].into_iter());
+    let binding = StreamData::Str("x - y".to_string());
     let inputs2 =
-        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(3)), (VarName("y".into()), &StreamData::Int(4))].into_iter());
+        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(3)), (VarName("y".into()), &StreamData::Int(4)), (VarName("s".into()), &binding)].into_iter());
     let mut monitor = ConstraintBasedMonitor::new(
-        vec![VarName("x".into()), VarName("y".into())],
-        vec![VarName("z".into())],
+        vec![VarName("x".into()), VarName("y".into()), VarName("s".into())],
+        vec![VarName("z".into()), VarName("w".into())],
         cs3,
     );
     for (cs, i) in monitor.iter_constraints().zip(0..3) {
@@ -92,5 +99,9 @@ fn main() {
 
     for (i, x) in monitor.iter_outputs().enumerate() {
         println!("z[{}] = {:?}", i, x[&VarName("z".into())]);
+    }
+
+    for (i, x) in monitor.iter_outputs().enumerate() {
+        println!("w[{}] = {:?}", i, x[&VarName("z".into())]);
     }
 }

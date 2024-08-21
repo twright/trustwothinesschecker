@@ -1,4 +1,6 @@
-use std::{fmt::Display, mem};
+use std::{cmp::min, f32::consts::E, fmt::Display, mem};
+
+use winnow::Parser;
 
 use crate::ast::*;
 
@@ -160,6 +162,7 @@ fn to_indexed_expr(s: &SExpr<VarName>, current_index: isize) -> SExpr<IndexedVar
             Box::new(to_indexed_expr(s, current_index)),
             Box::new(to_indexed_expr(s, current_index)),
         ),
+        Eval(s) => Eval(Box::new(to_indexed_expr(s, current_index))),
     }
 }
 
@@ -190,57 +193,57 @@ pub fn to_indexed_constraints(
     }
 }
 pub trait PartialEvaluable<VarT: Eq + Clone + IndexableVar> {
-    fn partial_eval(&self, cs: &SExprConstraintStore<VarT>) -> Self;
+    fn partial_eval(&self, cs: &SExprConstraintStore<VarT>, time: usize) -> Self;
 }
 
-impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
-    fn partial_eval(&self, cs: &SExprConstraintStore<VarT>) -> Self {
+impl PartialEvaluable<IndexedVarName> for SExpr<IndexedVarName> {
+    fn partial_eval(&self, cs: &SExprConstraintStore<IndexedVarName>, time: usize) -> Self {
         use SExpr::*;
         use StreamData::*;
         match self {
             Val(s) => Val(s.clone()),
             Plus(a, b) => {
-                let a_s = a.partial_eval(cs);
-                let b_s = b.partial_eval(cs);
+                let a_s = a.partial_eval(cs, time);
+                let b_s = b.partial_eval(cs, time);
                 match (a_s, b_s) {
                     // TODO: Sort other datatypes after exprs
                     (Val(Int(n1)), Val(Int(n2))) => Val(Int(n1 + n2)),
                     (Val(Int(n1)), b1) => {
-                        Plus(Box::new(b1), Box::new(Val(Int(n1)))).partial_eval(cs)
+                        Plus(Box::new(b1), Box::new(Val(Int(n1)))).partial_eval(cs, time)
                     }
                     (Plus(a1, b1), c1) => {
-                        Plus(a1, Box::new(Plus(b1, Box::new(c1)))).partial_eval(cs)
+                        Plus(a1, Box::new(Plus(b1, Box::new(c1)))).partial_eval(cs, time)
                     }
                     // Explicitly match the variables to avoid use after move
                     (a_ss, b_ss) => Plus(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
             Minus(a, b) => {
-                let a_s = a.partial_eval(cs);
-                let b_s = b.partial_eval(cs);
+                let a_s = a.partial_eval(cs, time);
+                let b_s = b.partial_eval(cs, time);
                 match (a_s, b_s) {
                     (Val(Int(n1)), Val(Int(n2))) => Val(Int(n1 - n2)),
                     (a_ss, b_ss) => Minus(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
             Mult(a, b) => {
-                let a_s = a.partial_eval(cs);
-                let b_s = b.partial_eval(cs);
+                let a_s = a.partial_eval(cs, time);
+                let b_s = b.partial_eval(cs, time);
                 match (a_s, b_s) {
                     (Val(Int(n1)), Val(Int(n2))) => Val(Int(n1 * n2)),
                     (Val(Int(n1)), b1) => {
-                        Mult(Box::new(b1.clone()), Box::new(Val(Int(n1)))).partial_eval(cs)
+                        Mult(Box::new(b1.clone()), Box::new(Val(Int(n1)))).partial_eval(cs, time)
                     }
                     (Mult(a1, b1), c1) => {
-                        Mult(a1, Box::new(Mult(b1, Box::new(c1.clone())))).partial_eval(cs)
+                        Mult(a1, Box::new(Mult(b1, Box::new(c1.clone())))).partial_eval(cs, time)
                     }
                     (a_ss, b_ss) => Mult(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
             If(b, e1, e2) => {
-                let b_s = b.partial_eval(cs);
-                let e1_s = e1.partial_eval(cs);
-                let e2_s = e2.partial_eval(cs);
+                let b_s = b.partial_eval(cs, time);
+                let e1_s = e1.partial_eval(cs, time);
+                let e2_s = e2.partial_eval(cs, time);
                 match b_s {
                     BExpr::Val(true) => e1_s,
                     BExpr::Val(false) => e2_s,
@@ -249,10 +252,10 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
                 }
             }
             Index(s, i, c) => {
-                let s_s = s.partial_eval(cs);
+                let s_s = s.partial_eval(cs, time);
                 match s_s {
                     Var(var) => var.index(*i, c),
-                    Val(Int(n)) => Val(Int(n)),
+                    Val(x) => Val(x),
                     _ => Index(Box::new(s_s), *i, c.clone()),
                 }
             }
@@ -260,56 +263,68 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for SExpr<VarT> {
                 Some(sexpr) => sexpr,
                 None => Var(var.clone()),
             },
+            Eval(s) => match s.partial_eval(cs, time) {
+                Val(Str(s)) => match crate::parser::sexpr.parse_next(&mut s.as_str()) {
+                    Ok(s_s) => to_indexed_expr(&s_s, 0).partial_eval(cs, time),
+                    Err(_) => Eval(Box::new(Val(Str(s)))),
+                },
+                Val(x) => Val(x),
+                s_s => Eval(Box::new(s_s)),
+            },
         }
     }
 }
 
-impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for BExpr<VarT> {
-    fn partial_eval(&self, cs: &SExprConstraintStore<VarT>) -> Self {
+impl PartialEvaluable<IndexedVarName> for BExpr<IndexedVarName> {
+    fn partial_eval(&self, cs: &SExprConstraintStore<IndexedVarName>, time: usize) -> Self {
         use BExpr::*;
         use StreamData::*;
         match self {
             Val(bool) => Val(*bool),
             Eq(a, b) => {
-                let a_s = a.partial_eval(cs);
-                let b_s = b.partial_eval(cs);
+                let a_s = a.partial_eval(cs, time);
+                let b_s = b.partial_eval(cs, time);
                 match (a_s, b_s) {
                     (SExpr::Val(x1), SExpr::Val(x2)) => Val(x1 == x2),
                     (a_ss, b_ss) => Eq(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
             Le(a, b) => {
-                let a_s = a.partial_eval(cs);
-                let b_s = b.partial_eval(cs);
+                let a_s = a.partial_eval(cs, time);
+                let b_s = b.partial_eval(cs, time);
                 match (a_s, b_s) {
                     (SExpr::Val(Int(x1)), SExpr::Val(Int(x2))) => Val(x1 <= x2),
                     (a_ss, b_ss) => Le(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
             Not(b) => {
-                let b_s = b.partial_eval(cs);
+                let b_s = b.partial_eval(cs, time);
                 match b_s {
                     Val(b1) => Val(!b1),
                     _ => Not(Box::new(b_s)),
                 }
             }
             And(a, b) => {
-                let a_s = a.partial_eval(cs);
-                let b_s = b.partial_eval(cs);
+                let a_s = a.partial_eval(cs, time);
+                let b_s = b.partial_eval(cs, time);
                 match (a_s, b_s) {
                     (Val(b1), Val(b2)) => Val(b1 && b2),
-                    (Val(a1), b1) => And(Box::new(b1), Box::new(Val(a1))).partial_eval(cs),
-                    (And(a1, b1), c1) => And(a1, Box::new(And(b1, Box::new(c1)))).partial_eval(cs),
+                    (Val(a1), b1) => And(Box::new(b1), Box::new(Val(a1))).partial_eval(cs, time),
+                    (And(a1, b1), c1) => {
+                        And(a1, Box::new(And(b1, Box::new(c1)))).partial_eval(cs, time)
+                    }
                     (a_ss, b_ss) => And(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
             Or(a, b) => {
-                let a_s = a.partial_eval(cs);
-                let b_s = b.partial_eval(cs);
+                let a_s = a.partial_eval(cs, time);
+                let b_s = b.partial_eval(cs, time);
                 match (a_s, b_s) {
                     (Val(b1), Val(b2)) => Val(b1 || b2),
-                    (Val(a1), b1) => Or(Box::new(b1), Box::new(Val(a1))).partial_eval(cs),
-                    (Or(a1, b1), c1) => Or(a1, Box::new(Or(b1, Box::new(c1)))).partial_eval(cs),
+                    (Val(a1), b1) => Or(Box::new(b1), Box::new(Val(a1))).partial_eval(cs, time),
+                    (Or(a1, b1), c1) => {
+                        Or(a1, Box::new(Or(b1, Box::new(c1)))).partial_eval(cs, time)
+                    }
                     (a_ss, b_ss) => Or(Box::new(a_ss), Box::new(b_ss)),
                 }
             }
@@ -317,12 +332,12 @@ impl<VarT: Eq + Clone + IndexableVar> PartialEvaluable<VarT> for BExpr<VarT> {
     }
 }
 
-impl<VarT: Eq + Clone + IndexableVar> SExprConstraintStore<VarT> {
-    pub fn solve_step(&self) -> SExprConstraintStore<VarT> {
+impl SExprConstraintStore<IndexedVarName> {
+    pub fn solve_step(&self, time: usize) -> SExprConstraintStore<IndexedVarName> {
         let unresolved = self
             .unresolved
             .iter()
-            .map(|(v, s)| (v.clone(), s.partial_eval(self)))
+            .map(|(v, s)| (v.clone(), s.partial_eval(self, time)))
             .collect();
 
         SExprConstraintStore::default()
@@ -331,12 +346,15 @@ impl<VarT: Eq + Clone + IndexableVar> SExprConstraintStore<VarT> {
             .to_owned()
     }
 
-    pub fn solve(&mut self) {
-        let cs_new = self.solve_step();
+    pub fn solve(&mut self, time: usize) {
+        let cs_new = self.solve_step(time);
 
         if cs_new == *self {
             return;
+        } else {
+            *self = cs_new;
+
+            self.solve(time);
         }
-        *self = cs_new;
     }
 }
