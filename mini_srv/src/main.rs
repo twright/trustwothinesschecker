@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    pin::Pin,
+};
 
 mod ast;
 mod parser;
@@ -6,9 +9,11 @@ use ast::*;
 mod constraint_solver;
 use constraint_solver::*;
 mod monitor;
+use futures::{stream, StreamExt};
 use monitor::*;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut cs: SExprConstraintStore<IndexedVarName> = SExprConstraintStore {
         resolved: Vec::new(),
         unresolved: Vec::new(),
@@ -61,47 +66,101 @@ fn main() {
 
     let cs3 = SExprConstraintStore {
         resolved: vec![],
-        unresolved: vec![(
-            VarName("z".into()),
-            SExpr::Plus(
-                Box::new(SExpr::Var(VarName("x".into()))),
-                Box::new(SExpr::Var(VarName("y".into()))),
+        unresolved: vec![
+            (
+                VarName("z".into()),
+                SExpr::Plus(
+                    Box::new(SExpr::Var(VarName("x".into()))),
+                    Box::new(SExpr::Var(VarName("y".into()))),
+                ),
             ),
-        ),
-        (
-            VarName("w".into()),
-            SExpr::Eval(Box::new(SExpr::Var(VarName("z".into())))),
-        ),
+            (
+                VarName("w".into()),
+                SExpr::Eval(Box::new(SExpr::Var(VarName("z".into())))),
+            ),
         ],
     };
-    let binding = StreamData::Str("x + y".to_string());
-    let inputs1 =
-        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(1)), (VarName("y".into()), &StreamData::Int(2)), (VarName("s".into()), &binding), ].into_iter());
-    let binding = StreamData::Str("x - y".to_string());
-    let inputs2 =
-        BTreeMap::from_iter(vec![(VarName("x".into()), &StreamData::Int(3)), (VarName("y".into()), &StreamData::Int(4)), (VarName("s".into()), &binding)].into_iter());
-    let mut monitor = ConstraintBasedMonitor::new(
-        vec![VarName("x".into()), VarName("y".into()), VarName("s".into())],
-        vec![VarName("z".into()), VarName("w".into())],
-        cs3,
+    let mut input_streams: BTreeMap<
+        _,
+        Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
+    > = BTreeMap::new();
+    input_streams.insert(
+        VarName("x".into()),
+        Box::pin(stream::iter(
+            vec![StreamData::Int(1), StreamData::Int(3)].into_iter(),
+        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
     );
-    for (cs, i) in monitor.iter_constraints().zip(0..3) {
+    input_streams.insert(
+        VarName("y".into()),
+        Box::pin(stream::iter(
+            vec![StreamData::Int(2), StreamData::Int(4)].into_iter(),
+        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
+    );
+    input_streams.insert(
+        VarName("s".into()),
+        Box::pin(stream::iter(
+            vec![
+                StreamData::Str("x+y".to_string()),
+                StreamData::Str("x+y".to_string()),
+            ]
+            .into_iter(),
+        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
+    );
+    let mut input_streams2: BTreeMap<
+        _,
+        Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
+    > = BTreeMap::new();
+    input_streams2.insert(
+        VarName("x".into()),
+        Box::pin(stream::iter(
+            vec![StreamData::Int(1), StreamData::Int(3)].into_iter(),
+        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
+    );
+    input_streams2.insert(
+        VarName("y".into()),
+        Box::pin(stream::iter(
+            vec![StreamData::Int(2), StreamData::Int(4)].into_iter(),
+        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
+    );
+    input_streams.insert(
+        VarName("s".into()),
+        Box::pin(stream::iter(
+            vec![
+                StreamData::Str("x+y".to_string()),
+                StreamData::Str("x+y".to_string()),
+            ]
+            .into_iter(),
+        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
+    );
+    let binding = ValStreamCollection(input_streams);
+    let mut monitor = ConstraintBasedMonitor::new(
+        vec![
+            VarName("x".into()),
+            VarName("y".into()),
+            VarName("s".into()),
+        ],
+        vec![VarName("z".into()), VarName("w".into())],
+        cs3.clone(),
+        binding,
+    );
+    let mut constraints = monitor.monitor_constraints().enumerate();
+    while let Some((i, cs)) = constraints.next().await {
         println!("Step {}:\n{}", i, cs);
     }
-    monitor.publish_inputs(&inputs1);
-    for (cs, i) in monitor.iter_constraints().zip(0..3) {
-        println!("Step {}:\n{}", i, cs);
-    }
-    monitor.publish_inputs(&inputs2);
-    for (cs, i) in monitor.iter_constraints().zip(0..3) {
-        println!("Step {}:\n{}", i, cs);
-    }
-
-    for (i, x) in monitor.iter_outputs().enumerate() {
-        println!("z[{}] = {:?}", i, x[&VarName("z".into())]);
-    }
-
-    for (i, x) in monitor.iter_outputs().enumerate() {
-        println!("w[{}] = {:?}", i, x[&VarName("z".into())]);
+    let binding = ValStreamCollection(input_streams2);
+    let mut monitor2 = ConstraintBasedMonitor::new(
+        vec![
+            VarName("x".into()),
+            VarName("y".into()),
+            VarName("s".into()),
+        ],
+        vec![VarName("z".into()), VarName("w".into())],
+        cs3.clone(),
+        binding,
+    );
+    let mut outputs = monitor2.monitor_outputs().enumerate();
+    while let Some((i, output)) = outputs.next().await {
+        println!("z[{}]: {}", i, output.get(&VarName("z".into())).unwrap());
+        println!("w[{}]: {}", i, output.get(&VarName("w".into())).unwrap());
     }
 }

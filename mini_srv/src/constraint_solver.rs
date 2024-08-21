@@ -139,7 +139,7 @@ fn to_indexed_bexpr(b: &BExpr<VarName>) -> BExpr<IndexedVarName> {
     }
 }
 
-fn to_indexed_expr(s: &SExpr<VarName>, current_index: isize) -> SExpr<IndexedVarName> {
+fn to_indexed_expr(s: &SExpr<VarName>, current_index: usize) -> SExpr<IndexedVarName> {
     use SExpr::*;
     match s {
         Val(n) => Val(n.clone()),
@@ -168,7 +168,7 @@ fn to_indexed_expr(s: &SExpr<VarName>, current_index: isize) -> SExpr<IndexedVar
 
 pub fn to_indexed_constraints(
     cs: &SExprConstraintStore<VarName>,
-    current_index: isize,
+    current_index: usize,
 ) -> SExprConstraintStore<IndexedVarName> {
     let resolved: Vec<SExprConstraintSolved<IndexedVarName>> = cs
         .resolved

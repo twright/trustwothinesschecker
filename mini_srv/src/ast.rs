@@ -28,7 +28,7 @@ impl Display for StreamData {
 pub struct VarName(pub Box<str>);
 
 #[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Ord)]
-pub struct IndexedVarName(pub Box<str>, pub isize);
+pub struct IndexedVarName(pub Box<str>, pub usize);
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum BExpr<VarT> {
@@ -73,7 +73,7 @@ impl Display for VarName {
 }
 
 impl VarName {
-    pub fn to_indexed(&self, i: isize) -> IndexedVarName {
+    pub fn to_indexed(&self, i: usize) -> IndexedVarName {
         IndexedVarName(self.0.clone(), i)
     }
 }
@@ -134,7 +134,10 @@ impl IndexableVar for IndexedVarName {
         match self {
             // If the shifted index is positive, we can just shift the index
             // attached to the variable
-            IndexedVarName(name, j) if j + i >= 0 => Var(IndexedVarName(name.clone(), j + i)),
+            IndexedVarName(name, j) if i.wrapping_add_unsigned(*j) >= 0 => Var(IndexedVarName(
+                name.clone(),
+                i.wrapping_add_unsigned(*j) as usize,
+            )),
             // If not the indexed variable is replaced with the default value
             IndexedVarName(_, _) => Val(c.clone()),
         }

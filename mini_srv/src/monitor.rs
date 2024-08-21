@@ -1,115 +1,91 @@
+use futures::future::join_all;
+use futures::stream;
+use futures::stream::BoxStream;
+use futures::stream::LocalBoxStream;
+use futures::Stream;
+use futures::StreamExt;
 use std::collections::BTreeMap;
 use std::iter::zip;
 
 use crate::ast::*;
 use crate::constraint_solver::*;
 
-// Temporarily focus on inputs which are streams of integers
-#[derive(Clone, Debug)]
-struct ValStreamVec(Vec<StreamData>);
+pub struct ValStreamCollection(pub BTreeMap<VarName, BoxStream<'static, StreamData>>);
 
-pub trait ValStream {
-    fn publish(&mut self, data: &StreamData);
-
-    fn iter(&self) -> Box<dyn Iterator<Item = &'_ StreamData> + '_>;
-}
-
-impl ValStream for ValStreamVec {
-    fn publish(&mut self, data: &StreamData) {
-        self.0.push(data.clone());
-    }
-
-    fn iter(&self) -> Box<dyn Iterator<Item = &'_ StreamData> + '_> {
-        Box::new(self.0.iter())
-    }
-}
-
-pub struct ValStreamTree(BTreeMap<VarName, ValStreamVec>);
-
-pub trait ValStreamCollection {
-    fn publish_inputs(&mut self, input: &BTreeMap<VarName, &StreamData>);
-
-    fn iter(&self) -> impl Iterator<Item = BTreeMap<VarName, &'_ StreamData>> + '_;
-}
-
-struct ValStreamIter<'a> {
-    keys: Vec<VarName>,
-    iters: Vec<Box<dyn Iterator<Item = &'a StreamData> + 'a>>,
-}
-
-impl<'a> Iterator for ValStreamIter<'a> {
-    type Item = BTreeMap<VarName, &'a StreamData>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let mut res = BTreeMap::new();
-
-        for (k, v) in zip(&self.keys, &mut self.iters) {
-            match v.next() {
-                Some(val) => {
-                    res.insert(k.clone(), val);
-                }
-                None => {
-                    return None;
+impl ValStreamCollection {
+    fn stream(&mut self) -> BoxStream<'_, BTreeMap<VarName, StreamData>> {
+        Box::pin(futures::stream::unfold(self, |streams| async move {
+            let mut res = BTreeMap::new();
+            let nexts = streams.0.values_mut().map(|s| s.next());
+            let next_vals = join_all(nexts).await;
+            for (k, v) in zip(streams.0.keys(), next_vals) {
+                match v {
+                    Some(v) => {
+                        res.insert(k.clone(), v);
+                    }
+                    None => {
+                        return None;
+                    }
                 }
             }
-        }
-
-        Some(res)
+            Some((res, streams))
+        }))
     }
 }
 
-impl ValStreamCollection for ValStreamTree {
-    fn publish_inputs(&mut self, input: &BTreeMap<VarName, &StreamData>) {
-        for (k, v) in input {
-            self.0
-                .entry(k.clone())
-                .or_insert(ValStreamVec(Vec::new()))
-                .publish(v.clone());
-        }
-    }
-
-    fn iter(&self) -> impl Iterator<Item = BTreeMap<VarName, &'_ StreamData>> + '_ {
-        let mut iters: Vec<Box<dyn Iterator<Item = &'_ StreamData> + '_>> = Vec::new();
-        for v in self.0.values() {
-            iters.push(Box::new(v.0.iter()));
-        }
-        ValStreamIter::<'_> {
-            keys: self.0.keys().cloned().collect(),
-            iters,
-        }
-    }
-}
-
-fn inputs_to_constraint_stream(
-    inputs: &ValStreamTree,
-) -> Box<dyn Iterator<Item = SExprConstraintStore<IndexedVarName>> + '_> {
-    Box::new(inputs.iter().enumerate().map(|(time, input)| {
+fn inputs_to_constraints<'a>(
+    inputs: BoxStream<'a, BTreeMap<VarName, StreamData>>,
+) -> BoxStream<'a, SExprConstraintStore<IndexedVarName>> {
+    Box::pin(inputs.enumerate().map(|(i, input)| {
         SExprConstraintStore {
             resolved: input
                 .iter()
-                .map(|(k, v)| (k.clone().to_indexed(time.try_into().unwrap()), (*v).clone()))
+                .map(|(k, v)| (k.clone().to_indexed(i), (*v).clone()))
                 .collect(),
             unresolved: Vec::new(),
         }
     }))
 }
 
+fn constraints_to_outputs<'a>(
+    constraints: BoxStream<'a, SExprConstraintStore<IndexedVarName>>,
+    output_vars: Vec<VarName>,
+) -> BoxStream<'a, BTreeMap<VarName, StreamData>> {
+    Box::pin(constraints.enumerate().map(move |(index, cs)| {
+        let mut res = BTreeMap::new();
+        for (k, v) in cs.resolved {
+            for var in &output_vars {
+                if k == var.to_indexed(index) {
+                    res.insert(var.clone(), v.clone());
+                }
+            }
+        }
+        res
+    }))
+}
+
 pub struct ConstraintBasedMonitor {
-    input_streams: ValStreamTree,
+    input_streams: ValStreamCollection,
     constraints: SExprConstraintStore<VarName>,
     input_vars: Vec<VarName>,
     output_vars: Vec<VarName>,
     input_index: usize,
 }
 
+// unsafe impl Send for SExprConstraintStore<VarName> {}
+// unsafe impl Sync for SExprConstraintStore<VarName> {}
+// unsafe impl Send for SExprConstraintStore<IndexedVarName> {}
+// unsafe impl Sync for SExprConstraintStore<IndexedVarName> {}
+
 impl ConstraintBasedMonitor {
     pub fn new(
         input_vars: Vec<VarName>,
         output_vars: Vec<VarName>,
         constraints: SExprConstraintStore<VarName>,
+        input_streams: ValStreamCollection,
     ) -> Self {
         ConstraintBasedMonitor {
-            input_streams: ValStreamTree(BTreeMap::new()),
+            input_streams,
             constraints,
             input_vars,
             output_vars,
@@ -117,95 +93,64 @@ impl ConstraintBasedMonitor {
         }
     }
 
-    pub fn publish_inputs(&mut self, input: &BTreeMap<VarName, &StreamData>) {
-        for k in input.keys() {
-            if !self.input_vars.contains(k) {
-                panic!("Unexpected input variable");
-            }
-        }
-        self.input_index += 1;
-        self.input_streams.publish_inputs(input);
+    pub fn stream_constraints(&mut self) -> BoxStream<'_, SExprConstraintStore<IndexedVarName>> {
+        inputs_to_constraints(self.input_streams.stream())
     }
 
-    pub fn iter_constraints(
-        &self,
-    ) -> impl Iterator<Item = SExprConstraintStore<IndexedVarName>> + '_ {
-        MonitorConstraintIter::new(self, &self.input_streams)
-    }
-
-    pub fn iter_outputs(&self) -> impl Iterator<Item = BTreeMap<VarName, StreamData>> + '_ {
-        self.iter_constraints().enumerate().map(|(i, cs)| {
+    pub fn stream_outputs(&mut self) -> LocalBoxStream<'_, BTreeMap<VarName, StreamData>> {
+        let outputs = self.output_vars.clone();
+        let input_index = self.input_index.clone();
+        Box::pin(self.stream_constraints().map(move |cs| {
             let mut res = BTreeMap::new();
-            for k in &self.output_vars {
+            for k in &outputs {
                 res.insert(
                     k.clone(),
                     cs.resolved
                         .iter()
                         .find_map(|(v, s)| {
-                            if *v == k.to_indexed(i.try_into().unwrap()) {
+                            if *v == k.to_indexed(input_index.try_into().unwrap()) {
                                 Some(s.clone())
                             } else {
                                 None
                             }
                         })
-                        .unwrap_or_else(|| StreamData::Unknown),
+                        .unwrap_or_else(|| StreamData::Unknown)
+                        .clone(),
                 );
             }
             res
-        })
+        }))
     }
-}
 
-struct MonitorConstraintIter<'a> {
-    monitor: &'a ConstraintBasedMonitor,
-    constraints: SExprConstraintStore<IndexedVarName>,
-    input_stream_iter: Box<dyn Iterator<Item = SExprConstraintStore<IndexedVarName>> + 'a>,
-    index: usize,
-}
-
-impl<'a> MonitorConstraintIter<'a> {
-    fn new(monitor: &'a ConstraintBasedMonitor, input_streams: &'a ValStreamTree) -> Self {
-        MonitorConstraintIter {
-            monitor,
-            constraints: SExprConstraintStore {
-                resolved: Vec::new(),
-                unresolved: Vec::new(),
-            },
-            input_stream_iter: Box::new(inputs_to_constraint_stream(input_streams)),
-            index: 0,
-        }
-    }
-}
-
-impl<'a> Iterator for MonitorConstraintIter<'a> {
-    type Item = SExprConstraintStore<IndexedVarName>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let new_constraints = self.input_stream_iter.next();
-
-        match new_constraints {
-            Some(new_constraints) => {
+    pub fn monitor_constraints(&mut self) -> BoxStream<'_, SExprConstraintStore<IndexedVarName>> {
+        let initial_constraints = SExprConstraintStore::<IndexedVarName>::default();
+        let overall_constraints = self.constraints.clone();
+        let inputs_initial = self.stream_constraints();
+        Box::pin(stream::unfold(
+            (0, initial_constraints, inputs_initial, overall_constraints),
+            |(index, mut constraints, mut inputs, cs)| async move {
                 // Add the new contraints to the constraint store
-                self.constraints.extend(new_constraints);
+                let new_constraints = inputs.next().await?;
+                constraints.extend(new_constraints);
 
                 // Add new output equations to the constraint store
-                self.constraints.extend(to_indexed_constraints(
-                    &self.monitor.constraints,
+                constraints.extend(to_indexed_constraints(
+                    &cs.clone(),
                     // Potential panic from usize to isize conversion
-                    self.index.try_into().unwrap(),
+                    index.try_into().unwrap(),
                 ));
 
                 // Solve the extended constraint system
-                self.constraints.solve(self.index);
+                constraints.solve(index.clone());
 
-                // Increment the output index
-                self.index += 1;
+                // Keep unfolding
+                Some((constraints.clone(), (index + 1, constraints, inputs, cs)))
+            },
+        ))
+    }
 
-                Some(self.constraints.clone())
-            }
-            None => {
-                return None;
-            }
-        }
+    pub fn monitor_outputs(&mut self) -> BoxStream<'_, BTreeMap<VarName, StreamData>> {
+        let output_vars = self.output_vars.clone();
+        constraints_to_outputs(self.monitor_constraints(), output_vars)
     }
 }
