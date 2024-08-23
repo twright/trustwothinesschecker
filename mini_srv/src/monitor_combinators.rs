@@ -1,262 +1,293 @@
 use core::panic;
+use std::{arch::x86_64, borrow::Borrow, rc::Rc, sync::Arc};
 
 use futures::{
     future,
     stream::{self, BoxStream, LocalBoxStream, Stream},
     StreamExt,
 };
+use winnow::Str;
 
 use crate::ast::*;
-
-// type InputFn = dyn Fn(VarName, Option<usize>) -> BoxStream<'static, StreamData>;
-// type MonitorFn = dyn Fn(&InputFn) -> BoxStream<'static, StreamData>;
+use dyn_clone::DynClone;
 
 // Define a sequence of traits which define the inputs and outputs
 // of monitor combinators
+pub trait InputFn: Fn(VarName) -> LocalBoxStream<'static, StreamData> + DynClone + 'static {}
+dyn_clone::clone_trait_object!(InputFn);
 
-pub trait InputFn:
-    Fn(VarName) -> BoxStream<'static, StreamData> + Clone + Sync + 'static
+impl<T> InputFn for T where
+    T: Fn(VarName) -> LocalBoxStream<'static, StreamData> + DynClone + 'static
 {
 }
-pub trait OutputFn<IF>: Fn(IF) -> BoxStream<'static, StreamData> + Clone + Sync + 'static {
+
+pub trait OutputFn<IF>: Fn(IF) -> LocalBoxStream<'static, StreamData> + DynClone + 'static {
     type IF: InputFn;
 }
 
 impl<IF, F> OutputFn<IF> for F
 where
-    F: Fn(IF) -> BoxStream<'static, StreamData> + Clone + Sync + 'static,
+    F: Fn(IF) -> LocalBoxStream<'static, StreamData> + DynClone + 'static,
     IF: InputFn,
 {
     type IF = IF;
 }
+dyn_clone::clone_trait_object!(<IF:InputFn>OutputFn<IF,IF=IF>);
 
-// Define traits for monitor combinators
-pub trait CompMonitorFn1<A, IF>: Fn(A) -> <Self as CompMonitorFn1<A, IF>>::Ret {
-    type Ret: OutputFn<IF>;
-}
+pub trait CloneFn1: Fn(StreamData) -> StreamData + Clone + 'static {}
+impl<T> CloneFn1 for T where T: Fn(StreamData) -> StreamData + Clone + 'static {}
 
-impl<A, F, RT, IF> CompMonitorFn1<A, IF> for F
+pub fn lift1<IF>(
+    f: impl CloneFn1,
+    x_mon: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
-    F: Fn(A) -> RT,
-    RT: OutputFn<IF>,
-{
-    type Ret = RT;
-}
-
-pub trait CompMonitorFn2<A, B, IF>: Fn(A, B) -> <Self as CompMonitorFn2<A, B, IF>>::Ret {
-    type Ret: OutputFn<IF>;
-}
-
-impl<A, B, F, RT, IF> CompMonitorFn2<A, B, IF> for F
-where
-    F: Fn(A, B) -> RT,
-    RT: OutputFn<IF>,
-{
-    type Ret = RT;
-}
-
-pub trait CompMonitorFn3<A, B, C, IF>:
-    Fn(A, B, C) -> <Self as CompMonitorFn3<A, B, C, IF>>::Ret
-{
-    type Ret: OutputFn<IF>;
-}
-
-impl<A, B, C, F, RT, IF> CompMonitorFn3<A, B, C, IF> for F
-where
-    F: Fn(A, B, C) -> RT,
-    RT: OutputFn<IF>,
-{
-    type Ret = RT;
-}
-
-// The type for this needs to be defined indirectly due to needing
-// nested impls which rely on the unstable feature
-// https://github.com/rust-lang/rust/pull/93582
-pub fn lift1<A, F, IF>(f: F) -> impl CompMonitorFn1<A, IF>
-where
-    F: Fn(StreamData) -> StreamData + Clone + Send + Sync + 'static,
-    A: OutputFn<IF>,
     IF: InputFn,
 {
-    // We need to clone into the closure at each stage to
-    // ensure that the closure is Fn
-    // see: https://internals.rust-lang.org/t/feature-request-add-clone-closure/15484
     let f = f.clone();
-    move |x_mon| {
+    let x_mon = x_mon.clone();
+
+    Box::new(move |in_fn: IF| {
         let f = f.clone();
-        let x_mon = x_mon.clone();
-        move |in_fn: IF| {
-            Box::pin(x_mon(in_fn.clone()).map(f.clone())) as BoxStream<'static, StreamData>
-        }
-    }
+        let in_fn = *dyn_clone::clone_box(&in_fn);
+        Box::pin(x_mon(in_fn).map(move |x| f(x))) as LocalBoxStream<'static, StreamData>
+    })
 }
 
-pub fn lift2<A, B, F, IF>(f: F) -> impl CompMonitorFn2<A, B, IF>
+pub trait CloneFn2: Fn(StreamData, StreamData) -> StreamData + Clone + 'static {}
+impl<T> CloneFn2 for T where T: Fn(StreamData, StreamData) -> StreamData + Clone + 'static {}
+
+pub fn lift2<IF>(
+    f: impl CloneFn2,
+    x_mon: Box<dyn OutputFn<IF, IF = IF>>,
+    y_mon: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
-    F: Fn(StreamData, StreamData) -> StreamData + Copy + Send + Sync + 'static,
-    A: OutputFn<IF>,
-    B: OutputFn<IF>,
     IF: InputFn,
 {
     let f = f.clone();
-    move |x_mon, y_mon| {
-        let x_mon = x_mon.clone();
-        let y_mon = y_mon.clone();
-        move |in_fn: IF| {
-            Box::pin(
-                x_mon(in_fn.clone())
-                    .zip(y_mon(in_fn))
-                    .map(move |(x, y)| f(x, y)),
-            ) as BoxStream<'static, StreamData>
-        }
-    }
+    let x_mon = x_mon.clone();
+    let y_mon = y_mon.clone();
+
+    Box::new(move |in_fn: IF| {
+        let f = f.clone();
+        let in_fn1 = *dyn_clone::clone_box(&in_fn);
+        let in_fn2 = *dyn_clone::clone_box(&in_fn);
+        Box::pin(x_mon(in_fn1).zip(y_mon(in_fn2)).map(move |(x, y)| f(x, y)))
+            as LocalBoxStream<'static, StreamData>
+    })
 }
 
-pub fn lift3<A, B, C, F, IF>(f: F) -> impl CompMonitorFn3<A, B, C, IF>
+pub trait CloneFn3: Fn(StreamData, StreamData, StreamData) -> StreamData + Clone + 'static {}
+impl<T> CloneFn3 for T where
+    T: Fn(StreamData, StreamData, StreamData) -> StreamData + Clone + 'static
+{
+}
+
+pub fn lift3<IF>(
+    f: impl CloneFn3,
+    x_mon: Box<dyn OutputFn<IF, IF = IF>>,
+    y_mon: Box<dyn OutputFn<IF, IF = IF>>,
+    z_mon: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
-    F: Fn(StreamData, StreamData, StreamData) -> StreamData + Copy + Send + Sync + 'static,
-    A: OutputFn<IF>,
-    B: OutputFn<IF>,
-    C: OutputFn<IF>,
     IF: InputFn,
 {
     let f = f.clone();
-    move |x_mon, y_mon, z_mon| {
-        let x_mon = x_mon.clone();
-        let y_mon = y_mon.clone();
-        let z_mon = z_mon.clone();
-        move |in_fn: IF| {
-            Box::pin(
-                x_mon(in_fn.clone())
-                    .zip(y_mon(in_fn.clone()))
-                    .zip(z_mon(in_fn.clone()))
-                    .map(move |((x, y), z)| f(x, y, z)),
-            ) as BoxStream<'static, StreamData>
-        }
-    }
-}
+    let x_mon = x_mon.clone();
+    let y_mon = y_mon.clone();
+    let z_mon = z_mon.clone();
 
-pub fn and<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>) -> impl OutputFn<IF>
+    Box::new(move |in_fn: IF| {
+        let f = f.clone();
+        let in_fn1 = *dyn_clone::clone_box(&in_fn);
+        let in_fn2 = *dyn_clone::clone_box(&in_fn);
+        let in_fn3 = *dyn_clone::clone_box(&in_fn);
+        Box::pin(
+            x_mon(in_fn1)
+                .zip(y_mon(in_fn2))
+                .zip(z_mon(in_fn3))
+                .map(move |((x, y), z)| f(x, y, z)),
+        ) as LocalBoxStream<'static, StreamData>
+    })
+}
+pub fn and<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift2(|x, y| StreamData::Bool(x == StreamData::Bool(true) && y == StreamData::Bool(true)))(x, y)
+    lift2(
+        |x, y| StreamData::Bool(x == StreamData::Bool(true) && y == StreamData::Bool(true)),
+        x,
+        y,
+    )
 }
 
-pub fn or<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn or<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift2(|x, y| StreamData::Bool(x == StreamData::Bool(true) || y == StreamData::Bool(true)))(x, y)
+    lift2(
+        |x, y| StreamData::Bool(x == StreamData::Bool(true) || y == StreamData::Bool(true)),
+        x,
+        y,
+    )
 }
 
-pub fn not<IF>(x: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn not<IF>(x: Box<dyn OutputFn<IF, IF = IF>>) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift1(|x| StreamData::Bool(x == StreamData::Bool(false)))(x)
+    lift1(|x| StreamData::Bool(x == StreamData::Bool(true)), x)
 }
 
-pub fn eq<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn eq<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift2(|x, y| StreamData::Bool(x == y))(x, y)
+    lift2(|x, y| StreamData::Bool(x == y), x, y)
 }
 
-pub fn le<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn le<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift2(|x, y| match (x, y) {
-        (StreamData::Int(x), StreamData::Int(y)) => StreamData::Bool(x <= y),
-        (StreamData::Bool(a), StreamData::Bool(b)) => StreamData::Bool(a <= b),
-        _ => panic!("Invalid comparison"),
-    })(x, y)
+    lift2(
+        |x, y| match (x, y) {
+            (StreamData::Int(x), StreamData::Int(y)) => StreamData::Bool(x <= y),
+            (StreamData::Bool(a), StreamData::Bool(b)) => StreamData::Bool(a <= b),
+            _ => panic!("Invalid comparison"),
+        },
+        x,
+        y,
+    )
 }
 
-pub fn val<IF>(x: StreamData) -> impl OutputFn<IF>
+pub fn val<IF>(x: StreamData) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    move |_: IF| Box::pin(stream::repeat(x.clone())) as BoxStream<'static, StreamData>
+    Box::new(move |_: IF| Box::pin(stream::repeat(x.clone())) as BoxStream<'static, StreamData>)
 }
 
-pub fn if_stm<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>, z: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn if_stm<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+    z: Box<dyn OutputFn<IF, IF = IF>>,
+) -> impl OutputFn<IF>
 where
     IF: InputFn,
 {
-    lift3(|x, y, z| match x {
-        StreamData::Bool(true) => y,
-        StreamData::Bool(false) => z,
-        _ => panic!("Invalid if condition"),
-    })(x, y, z)
+    lift3(
+        |x, y, z| match x {
+            StreamData::Bool(true) => y,
+            StreamData::Bool(false) => z,
+            _ => panic!("Invalid if condition"),
+        },
+        x,
+        y,
+        z,
+    )
 }
 
-pub fn index<IF>(x: impl OutputFn<IF>, i: isize, c: StreamData) -> impl OutputFn<IF>
+pub fn index<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    i: isize,
+    c: StreamData,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
     let c = c.clone();
-    move |in_fn: IF| {
-        let n = -i;
+    Box::new(move |in_fn: IF| {
         let c = c.clone();
-        Box::pin(if n >= 0 {
-            let n: usize = n.try_into().unwrap();
-            let cs = stream::repeat(c).take(3);
-
-            cs.chain(x(in_fn.clone()).skip(n))
+        let in_fn = *dyn_clone::clone_box(&in_fn);
+        if i < 0 {
+            let n: usize = (-i).try_into().unwrap();
+            let cs = stream::repeat(c).take(n);
+            Box::pin(cs.chain(x(in_fn)))
         } else {
-            panic!("Indexing into future")
-        }) as BoxStream<'static, StreamData>
-    }
+            let n: usize = i.try_into().unwrap();
+            Box::pin(x(in_fn).skip(n))
+        }
+    })
 }
 
-pub fn plus<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn plus<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift2(|x, y| match (x, y) {
-        (StreamData::Int(x), StreamData::Int(y)) => StreamData::Int(x + y),
-        _ => panic!("Invalid addition"),
-    })(x, y)
+    lift2(
+        |x, y| match (x, y) {
+            (StreamData::Int(x), StreamData::Int(y)) => StreamData::Int(x + y),
+            _ => panic!("Invalid addition"),
+        },
+        x,
+        y,
+    )
 }
 
-pub fn minus<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn minus<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift2(|x, y| match (x, y) {
-        (StreamData::Int(x), StreamData::Int(y)) => StreamData::Int(x - y),
-        _ => panic!("Invalid subtraction"),
-    })(x, y)
+    lift2(
+        |x, y| match (x, y) {
+            (StreamData::Int(x), StreamData::Int(y)) => StreamData::Int(x - y),
+            _ => panic!("Invalid subtraction"),
+        },
+        x,
+        y,
+    )
 }
 
-pub fn mult<IF>(x: impl OutputFn<IF>, y: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn mult<IF>(
+    x: Box<dyn OutputFn<IF, IF = IF>>,
+    y: Box<dyn OutputFn<IF, IF = IF>>,
+) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    lift2(|x, y| match (x, y) {
-        (StreamData::Int(x), StreamData::Int(y)) => StreamData::Int(x * y),
-        _ => panic!("Invalid multiplication"),
-    })(x, y)
+    lift2(
+        |x, y| match (x, y) {
+            (StreamData::Int(x), StreamData::Int(y)) => StreamData::Int(x * y),
+            _ => panic!("Invalid multiplication"),
+        },
+        x,
+        y,
+    )
 }
 
-pub fn eval<IF>(x: impl OutputFn<IF>) -> impl OutputFn<IF>
+pub fn eval<IF>(x: Box<dyn OutputFn<IF, IF = IF>>) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    // TODO: Figure out how to properly implement eval
-    let x = x.clone();
-    x
+    unimplemented!("eval not implemented")
 }
 
-pub fn var<IF>(x: VarName) -> impl OutputFn<IF>
+pub fn var<IF>(x: VarName) -> Box<dyn OutputFn<IF, IF = IF>>
 where
     IF: InputFn,
 {
-    move |in_fn: IF| {
-        Box::pin(in_fn(x.clone()))
-        as BoxStream<'static, StreamData>
-    }
+    Box::new(move |in_fn: IF| {
+        let in_fn = *dyn_clone::clone_box(&in_fn);
+        Box::pin(in_fn(x.clone())) as LocalBoxStream<'static, StreamData>
+    })
 }
