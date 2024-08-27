@@ -168,6 +168,9 @@ pub fn eval(x: OutputStream) -> OutputStream {
 pub fn var(ctx: &impl StreamContext, x: VarName) -> OutputStream {
     match ctx.var(&x) {
         Some(x) => x,
-        None => panic!("Variable {x} not found"),
+        None => {
+            let VarName(x) = x;
+            panic!("Variable {} not found", x)
+        }
     }
 }

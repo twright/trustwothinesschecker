@@ -103,12 +103,10 @@ impl AsyncVarExchange {
 
         for var in vars {
             let (sender, _) = channel::<StreamData>(100);
-            senders.insert(var, Arc::new(Mutex::new(sender)));
+            senders.insert(var.clone(), Arc::new(Mutex::new(sender)));
         }
 
-        AsyncVarExchange {
-            senders: BTreeMap::new(),
-        }
+        AsyncVarExchange { senders }
     }
 
     fn publish(&self, var: &VarName, data: StreamData) {
@@ -162,6 +160,8 @@ impl AsyncMonitor {
         system: SExprConstraintStore<VarName>,
     ) -> Self {
         let var_names = input_vars.iter().chain(output_vars.iter()).collect();
+
+        println!("var_names: {:?}", var_names);
 
         let var_exchange = Arc::new(AsyncVarExchange::new(var_names));
 

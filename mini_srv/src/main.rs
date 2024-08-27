@@ -17,6 +17,8 @@ use monitor_async::*;
 
 #[tokio::main]
 async fn main() {
+    unsafe { backtrace_on_stack_overflow::enable() };
+
     let mut cs: SExprConstraintStore<IndexedVarName> = SExprConstraintStore {
         resolved: Vec::new(),
         unresolved: Vec::new(),
@@ -167,6 +169,16 @@ async fn main() {
         println!("w[{}]: {}", i, output.get(&VarName("w".into())).unwrap());
     }
 
+    let cs4 = SExprConstraintStore {
+        resolved: vec![],
+        unresolved: vec![(
+            VarName("z".into()),
+            SExpr::Plus(
+                Box::new(SExpr::Var(VarName("x".into()))),
+                Box::new(SExpr::Var(VarName("y".into()))),
+            ),
+        )],
+    };
     let mut input_streams: BTreeMap<
         _,
         Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
@@ -181,16 +193,6 @@ async fn main() {
         VarName("y".into()),
         Box::pin(stream::iter(
             vec![StreamData::Int(2), StreamData::Int(4)].into_iter(),
-        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
-    );
-    input_streams.insert(
-        VarName("s".into()),
-        Box::pin(stream::iter(
-            vec![
-                StreamData::Str("x+y".to_string()),
-                StreamData::Str("x+y".to_string()),
-            ]
-            .into_iter(),
         )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
     );
     let mut input_streams2: BTreeMap<
@@ -209,50 +211,30 @@ async fn main() {
             vec![StreamData::Int(2), StreamData::Int(4)].into_iter(),
         )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
     );
-    input_streams2.insert(
-        VarName("s".into()),
-        Box::pin(stream::iter(
-            vec![
-                StreamData::Str("x+y".to_string()),
-                StreamData::Str("x+y".to_string()),
-            ]
-            .into_iter(),
-        )) as Pin<Box<dyn futures::Stream<Item = ast::StreamData> + std::marker::Send>>,
-    );
 
     let mut async_monitor = AsyncMonitor::new(
         input_streams,
-        vec![
-            VarName("x".into()),
-            VarName("y".into()),
-            VarName("s".into()),
-        ],
-        vec![VarName("z".into()), VarName("w".into())],
-        cs3.clone(),
+        vec![VarName("x".into()), VarName("y".into())],
+        vec![VarName("z".into())],
+        cs4.clone(),
     );
     async_monitor.spawn();
     let mut outputs = async_monitor.monitor_outputs().take(2).enumerate();
     println!("Async Monitor 1:");
     while let Some((i, output)) = outputs.next().await {
         println!("z[{}]: {}", i, output.get(&VarName("z".into())).unwrap());
-        println!("w[{}]: {}", i, output.get(&VarName("w".into())).unwrap());
     }
 
     let mut async_monitor2 = AsyncMonitor::new(
         input_streams2,
-        vec![
-            VarName("x".into()),
-            VarName("y".into()),
-            VarName("s".into()),
-        ],
-        vec![VarName("z".into()), VarName("w".into())],
-        cs3.clone(),
+        vec![VarName("x".into()), VarName("y".into())],
+        vec![VarName("z".into())],
+        cs4.clone(),
     );
     async_monitor2.spawn();
     let mut outputs = async_monitor2.monitor_outputs().take(2).enumerate();
     println!("Async Monitor 2:");
     while let Some((i, output)) = outputs.next().await {
         println!("z[{}]: {}", i, output.get(&VarName("z".into())).unwrap());
-        println!("w[{}]: {}", i, output.get(&VarName("w".into())).unwrap());
     }
 }
