@@ -5,20 +5,25 @@ use winnow::Parser;
 
 use winnow::ascii::dec_int as integer;
 // Be sure to exclude actual tokens from the ident parser
-use winnow::ascii::alphanumeric0 as string;
+use winnow::ascii::alphanumeric0;
 use winnow::ascii::alphanumeric1 as ident;
 use winnow::ascii::space0 as whitespace;
 
 use crate::ast::*;
+use crate::core::{StreamData, VarName};
 
 pub fn aexpr(s: &mut &str) -> PResult<SExpr<VarName>> {
     aminus.parse_next(s)
 }
 
+fn string<'a>(s: &mut &'a str) -> PResult<&'a str> {
+    delimited('"', alphanumeric0, '"').parse_next(s)
+}
+
 fn streamdata(s: &mut &str) -> PResult<StreamData> {
     delimited(
         whitespace,
-        alt((
+    alt((
             integer.map(StreamData::Int),
             string.map(|s: &str| StreamData::Str(s.into())),
             literal("true").map(|_| StreamData::Bool(true)),
@@ -200,5 +205,5 @@ fn paren_sexpr(s: &mut &str) -> PResult<SExpr<VarName>> {
 }
 
 pub fn sexpr(s: &mut &str) -> PResult<SExpr<VarName>> {
-    alt((sif, sindex, paren_sexpr, aexpr)).parse_next(s)
+    alt((sif, paren_sexpr, aexpr)).parse_next(s)
 }

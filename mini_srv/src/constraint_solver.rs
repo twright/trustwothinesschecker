@@ -2,6 +2,7 @@ use std::{cmp::min, f32::consts::E, fmt::Display, mem};
 
 use winnow::Parser;
 
+use crate::core::{VarName, IndexedVarName, StreamData};
 use crate::ast::*;
 
 pub type SExprConstraint<VarT> = (VarT, SExpr<VarT>);

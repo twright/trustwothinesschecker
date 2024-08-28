@@ -1,34 +1,6 @@
-use std::fmt::Display;
+use std::{collections::BTreeMap, fmt::Display};
 
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum StreamData {
-    Int(i64),
-    Str(String),
-    Bool(bool),
-    Unknown,
-    Unit,
-}
-
-impl Display for StreamData {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            StreamData::Int(n) => write!(f, "{}", n),
-            StreamData::Bool(b) => write!(f, "{}", if *b { "true" } else { "false" }),
-            StreamData::Str(s) => write!(f, "{}", s),
-            StreamData::Unknown => write!(f, "unknown"),
-            StreamData::Unit => write!(f, "unit"),
-        }
-    }
-}
-
-// Could also do this with async steams
-// trait InputStream = Iterator<Item = StreamData>;
-
-#[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Ord)]
-pub struct VarName(pub Box<str>);
-
-#[derive(Clone, PartialEq, Eq, Debug, PartialOrd, Ord)]
-pub struct IndexedVarName(pub Box<str>, pub usize);
+use crate::core::{IndexedVarName, Monitor, StreamData, StreamExpr, VarName};
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum BExpr<VarT> {
@@ -66,9 +38,29 @@ pub enum SExpr<VarT> {
     Eval(Box<SExpr<VarT>>),
 }
 
-impl Display for VarName {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self)
+impl StreamExpr for SExpr<VarName> {
+    fn var(var: &VarName) -> Self {
+        SExpr::Var(var.clone())
+    }
+}
+
+pub struct LOLAMonitor {
+    pub input_vars: Vec<VarName>,
+    pub output_vars: Vec<VarName>,
+    pub exprs: BTreeMap<VarName, SExpr<VarName>>,
+}
+
+impl Monitor<SExpr<VarName>> for LOLAMonitor {
+    fn input_vars(&self) -> Vec<VarName> {
+        self.input_vars.clone()
+    }
+
+    fn output_vars(&self) -> Vec<VarName> {
+        self.output_vars.clone()
+    }
+
+    fn var_expr(&self, var: &VarName) -> Option<SExpr<VarName>> {
+        Some(self.exprs.get(var)?.clone())
     }
 }
 

@@ -2,13 +2,14 @@ use futures::future::join_all;
 use futures::stream;
 use futures::stream::BoxStream;
 use futures::stream::LocalBoxStream;
-use futures::Stream;
 use futures::StreamExt;
 use std::collections::BTreeMap;
 use std::iter::zip;
 
-use crate::ast::*;
 use crate::constraint_solver::*;
+use crate::core::IndexedVarName;
+use crate::core::StreamData;
+use crate::core::VarName;
 
 pub struct ValStreamCollection(pub BTreeMap<VarName, BoxStream<'static, StreamData>>);
 

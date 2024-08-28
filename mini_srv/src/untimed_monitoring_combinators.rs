@@ -1,19 +1,15 @@
 use core::panic;
-use std::sync::{Arc, Weak};
 
 use futures::{
     stream::{self, BoxStream},
-    StreamExt,
+    Stream, StreamExt,
 };
-use winnow::Str;
+use winnow::Parser;
 
-use crate::ast::*;
-
-pub type OutputStream = BoxStream<'static, StreamData>;
-
-pub trait StreamContext {
-    fn var(&self, x: &VarName) -> Option<OutputStream>;
-}
+use crate::{
+    core::{MonitoringSemantics, OutputStream, StreamContext, StreamData, VarName},
+    SExpr,
+};
 
 pub trait CloneFn1: Fn(StreamData) -> StreamData + Clone + Sync + Send + 'static {}
 impl<T> CloneFn1 for T where T: Fn(StreamData) -> StreamData + Sync + Send + Clone + 'static {}
@@ -161,8 +157,62 @@ pub fn mult(x: OutputStream, y: OutputStream) -> OutputStream {
     )
 }
 
-pub fn eval(x: OutputStream) -> OutputStream {
-    unimplemented!("eval not implemented")
+pub fn eval(
+    sem: impl MonitoringSemantics<SExpr<VarName>>,
+    ctx: &impl StreamContext,
+    x: OutputStream,
+) -> OutputStream {
+    let ctx = ctx.clone();
+    Box::pin(stream::unfold(
+        (sem, ctx, x, None::<(StreamData, OutputStream)>),
+        |(sem, ctx, mut x, mut last)| async move {
+            let current = x.next().await;
+            println!("Current: {:?}", current);
+
+            // If the current stream is has stopped, stop
+            // eval steam
+            if current == None {
+                return None;
+            }
+            let current = current.unwrap();
+
+            if let Some((prev, mut es)) = last {
+                if prev == current {
+                    let eval_res = es.next().await;
+                    return match eval_res {
+                        Some(eval_res) => Some((eval_res, (sem, ctx, x, Some((current, es))))),
+                        None => None,
+                    };
+                }
+            }
+
+            match current {
+                StreamData::Str(s) => {
+                    println!("s: {:?}", s);
+                    let s_parse = &mut s.as_str();
+                    let expr = match crate::parser::sexpr.parse_next(s_parse) {
+                        Ok(expr) => expr,
+                        Err(_) => unimplemented!("Invalid eval str"),
+                    };
+                    println!("expr: {}", expr);
+                    let mut es = sem.to_async_stream(expr, &ctx.clone());
+                    //let eval_res = es.next().await;
+                    return Some((
+                        StreamData::Unit,
+                        (sem, ctx, x, Some((StreamData::Str(s), es))),
+                    ));
+
+                    // return match eval_res {
+                    //     Some(eval_res) => {
+                    //         Some((eval_res, (sem, ctx, x, Some((StreamData::Str(s), es)))))
+                    //     }
+                    //     None => None,
+                    // };
+                }
+                x => unimplemented!("Invalid eval type {}", x),
+            }
+        },
+    )) as OutputStream
 }
 
 pub fn var(ctx: &impl StreamContext, x: VarName) -> OutputStream {
