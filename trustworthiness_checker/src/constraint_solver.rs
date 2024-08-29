@@ -1,19 +1,20 @@
-use std::{cmp::min, f32::consts::E, fmt::Display, mem};
+use std::{fmt::Debug, fmt::Display, mem};
 
 use winnow::Parser;
 
-use crate::core::{VarName, IndexedVarName, StreamData};
 use crate::ast::*;
+use crate::core::{IndexedVarName, StreamData, VarName};
 
 pub type SExprConstraint<VarT> = (VarT, SExpr<VarT>);
 pub type SExprConstraintSolved<VarT> = (VarT, StreamData);
 
-pub struct SExprConstraintStore<VarT> {
+#[derive(Debug)]
+pub struct SExprConstraintStore<VarT: Debug> {
     pub resolved: Vec<SExprConstraintSolved<VarT>>,
     pub unresolved: Vec<SExprConstraint<VarT>>,
 }
 
-impl<VarT> Default for SExprConstraintStore<VarT> {
+impl<VarT: Debug> Default for SExprConstraintStore<VarT> {
     fn default() -> Self {
         SExprConstraintStore {
             resolved: Vec::new(),
@@ -22,7 +23,7 @@ impl<VarT> Default for SExprConstraintStore<VarT> {
     }
 }
 
-impl<VarT: Clone + Eq> SExprConstraintStore<VarT> {
+impl<VarT: Clone + Eq + Debug> SExprConstraintStore<VarT> {
     pub fn resolved_exprs(&self) -> Vec<SExprConstraint<VarT>> {
         self.resolved
             .iter()
@@ -88,7 +89,7 @@ impl<VarT: Clone + Eq> SExprConstraintStore<VarT> {
     }
 }
 
-impl<VarT: Display> Display for SExprConstraintStore<VarT> {
+impl<VarT: Display + Debug> Display for SExprConstraintStore<VarT> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Resolved: [\n")?;
         for (var, sexpr) in self.resolved.iter() {
@@ -102,14 +103,14 @@ impl<VarT: Display> Display for SExprConstraintStore<VarT> {
     }
 }
 
-impl<VarT: Eq> PartialEq for SExprConstraintStore<VarT> {
+impl<VarT: Eq + Debug> PartialEq for SExprConstraintStore<VarT> {
     fn eq(&self, other: &Self) -> bool {
         self.resolved == other.resolved && self.unresolved == other.unresolved
     }
 }
-impl<VarT: Eq> Eq for SExprConstraintStore<VarT> {}
+impl<VarT: Eq + Debug> Eq for SExprConstraintStore<VarT> {}
 
-impl<VarT: Clone> Clone for SExprConstraintStore<VarT> {
+impl<VarT: Clone + Debug> Clone for SExprConstraintStore<VarT> {
     fn clone(&self) -> Self {
         SExprConstraintStore {
             resolved: self.resolved.clone(),
@@ -118,7 +119,7 @@ impl<VarT: Clone> Clone for SExprConstraintStore<VarT> {
     }
 }
 
-fn is_constraint_resolved<VarT>((_, s): &SExprConstraint<VarT>) -> bool {
+fn is_constraint_resolved<VarT: Debug>((_, s): &SExprConstraint<VarT>) -> bool {
     matches!(s, SExpr::Val(_))
 }
 
@@ -253,11 +254,13 @@ impl PartialEvaluable<IndexedVarName> for SExpr<IndexedVarName> {
                 }
             }
             Index(s, i, c) => {
-                let s_s = s.partial_eval(cs, time);
-                match s_s {
-                    Var(var) => var.index(*i, c),
-                    Val(x) => Val(x),
-                    _ => Index(Box::new(s_s), *i, c.clone()),
+                let shifted_time: isize = TryInto::<isize>::try_into(time).unwrap() + *i;
+                println!("shifted_time {:?}", shifted_time);
+                if shifted_time >= 0 {
+                    // panic!("before crash");
+                    s.partial_eval(cs, shifted_time.try_into().unwrap())
+                } else {
+                    SExpr::Val(c.clone())
                 }
             }
             Var(var) => match cs.match_var(var) {
@@ -265,7 +268,7 @@ impl PartialEvaluable<IndexedVarName> for SExpr<IndexedVarName> {
                 None => Var(var.clone()),
             },
             Eval(s) => match s.partial_eval(cs, time) {
-                Val(Str(s)) => match crate::parser::sexpr.parse_next(&mut s.as_str()) {
+                Val(Str(s)) => match crate::parser::lola_expression.parse_next(&mut s.as_str()) {
                     Ok(s_s) => to_indexed_expr(&s_s, 0).partial_eval(cs, time),
                     Err(_) => Eval(Box::new(Val(Str(s)))),
                 },
@@ -357,5 +360,95 @@ impl SExprConstraintStore<IndexedVarName> {
 
             self.solve(time);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ast::SExpr;
+    use crate::constraint_solver::*;
+    use crate::core::IndexedVarName;
+
+    fn recursive_constraints() -> SExprConstraintStore<VarName> {
+        SExprConstraintStore {
+            resolved: vec![],
+            unresolved: vec![(
+                VarName("x".into()),
+                SExpr::Plus(
+                    Box::new(SExpr::Val(StreamData::Int(1))),
+                    Box::new(SExpr::Index(
+                        Box::new(SExpr::Var(VarName("x".into()))),
+                        -1,
+                        StreamData::Int(0),
+                    )),
+                ),
+            )],
+        }
+    }
+
+    #[test]
+    fn test_to_indexed_constraints() {
+        assert_eq!(
+            to_indexed_constraints(&recursive_constraints(), 0),
+            SExprConstraintStore {
+                resolved: vec![],
+                unresolved: vec![(
+                    IndexedVarName("x".into(), 0),
+                    SExpr::Plus(
+                        Box::new(SExpr::Val(StreamData::Int(1))),
+                        Box::new(SExpr::Index(
+                            Box::new(SExpr::Var(IndexedVarName("x".into(), 0))),
+                            -1,
+                            StreamData::Int(0),
+                        )),
+                    ),
+                )],
+            }
+        );
+        assert_eq!(
+            to_indexed_constraints(&recursive_constraints(), 4),
+            SExprConstraintStore {
+                resolved: vec![],
+                unresolved: vec![(
+                    IndexedVarName("x".into(), 4),
+                    SExpr::Plus(
+                        Box::new(SExpr::Val(StreamData::Int(1))),
+                        Box::new(SExpr::Index(
+                            Box::new(SExpr::Var(IndexedVarName("x".into(), 4))),
+                            -1,
+                            StreamData::Int(0),
+                        ),),
+                    ),
+                )],
+            }
+        );
+    }
+
+    #[ignore="currently we can't handle recursive constraints in the solver as need a way to handle the inner indexes"]
+    #[test]
+    fn test_solve_indexed_constraints() {
+        let mut constraints = to_indexed_constraints(&recursive_constraints(), 0);
+        constraints.solve(0);
+        // constraints.solve_step(0);
+        // constraints.solve_step(0);
+        assert_eq!(
+            constraints,
+            SExprConstraintStore {
+                resolved: vec![(IndexedVarName("x".into(), 0), StreamData::Int(1)),],
+                unresolved: vec![],
+            }
+        );
+        let mut constraints = to_indexed_constraints(&recursive_constraints(), 1);
+        constraints.solve_step(1);
+        // constraints.solve_step(0);
+        // constraints.solve_step(0);
+        assert_eq!(
+            constraints,
+            SExprConstraintStore {
+                resolved: vec![(IndexedVarName("x".into(), 1), StreamData::Int(0)),],
+                unresolved: vec![],
+            }
+        )
     }
 }

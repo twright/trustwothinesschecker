@@ -1,9 +1,9 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Debug, fmt::Display};
 
-use crate::core::{IndexedVarName, Monitor, StreamData, StreamExpr, VarName};
+use crate::core::{IndexedVarName, Specification, StreamData, StreamExpr, VarName};
 
-#[derive(Clone, PartialEq, Eq)]
-pub enum BExpr<VarT> {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum BExpr<VarT: Debug> {
     Val(bool),
     Eq(Box<SExpr<VarT>>, Box<SExpr<VarT>>),
     Le(Box<SExpr<VarT>>, Box<SExpr<VarT>>),
@@ -12,8 +12,8 @@ pub enum BExpr<VarT> {
     Or(Box<BExpr<VarT>>, Box<BExpr<VarT>>),
 }
 
-#[derive(Clone, PartialEq, Eq)]
-pub enum SExpr<VarT> {
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum SExpr<VarT: Debug> {
     // if-then-else
     If(Box<BExpr<VarT>>, Box<SExpr<VarT>>, Box<SExpr<VarT>>),
 
@@ -44,13 +44,13 @@ impl StreamExpr for SExpr<VarName> {
     }
 }
 
-pub struct LOLAMonitor {
+pub struct LOLASpecification {
     pub input_vars: Vec<VarName>,
     pub output_vars: Vec<VarName>,
     pub exprs: BTreeMap<VarName, SExpr<VarName>>,
 }
 
-impl Monitor<SExpr<VarName>> for LOLAMonitor {
+impl Specification<SExpr<VarName>> for LOLASpecification {
     fn input_vars(&self) -> Vec<VarName> {
         self.input_vars.clone()
     }
@@ -77,7 +77,7 @@ impl Display for IndexedVarName {
     }
 }
 
-impl<VarT: Display> Display for SExpr<VarT> {
+impl<VarT: Display + Debug> Display for SExpr<VarT> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
             SExpr::If(b, e1, e2) => write!(f, "if {} then {} else {}", b, e1, e2),
@@ -92,7 +92,7 @@ impl<VarT: Display> Display for SExpr<VarT> {
     }
 }
 
-impl<VarT: Display> Display for BExpr<VarT> {
+impl<VarT: Display + Debug> Display for BExpr<VarT> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             BExpr::Val(b) => write!(f, "{}", if *b { "true" } else { "false" }),
@@ -106,7 +106,7 @@ impl<VarT: Display> Display for BExpr<VarT> {
 }
 
 // Trait for indexing a variable producing a new SExpr
-pub trait IndexableVar {
+pub trait IndexableVar: Debug {
     fn index(&self, i: isize, c: &StreamData) -> SExpr<Self>
     where
         Self: Sized;

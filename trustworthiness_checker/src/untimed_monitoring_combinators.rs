@@ -7,8 +7,8 @@ use futures::{
 use winnow::Parser;
 
 use crate::{
+    ast::SExpr,
     core::{MonitoringSemantics, OutputStream, StreamContext, StreamData, VarName},
-    SExpr,
 };
 
 pub trait CloneFn1: Fn(StreamData) -> StreamData + Clone + Sync + Send + 'static {}
@@ -165,7 +165,7 @@ pub fn eval(
     let ctx = ctx.clone();
     Box::pin(stream::unfold(
         (sem, ctx, x, None::<(StreamData, OutputStream)>),
-        |(sem, ctx, mut x, mut last)| async move {
+        |(sem, ctx, mut x, last)| async move {
             let current = x.next().await;
             println!("Current: {:?}", current);
 
@@ -190,12 +190,12 @@ pub fn eval(
                 StreamData::Str(s) => {
                     println!("s: {:?}", s);
                     let s_parse = &mut s.as_str();
-                    let expr = match crate::parser::sexpr.parse_next(s_parse) {
+                    let expr = match crate::parser::lola_expression.parse_next(s_parse) {
                         Ok(expr) => expr,
                         Err(_) => unimplemented!("Invalid eval str"),
                     };
                     println!("expr: {}", expr);
-                    let mut es = sem.to_async_stream(expr, &ctx.clone());
+                    let es = sem.to_async_stream(expr, &ctx.clone());
                     //let eval_res = es.next().await;
                     return Some((
                         StreamData::Unit,

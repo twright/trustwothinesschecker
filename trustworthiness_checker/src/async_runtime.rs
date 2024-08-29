@@ -16,8 +16,8 @@ use tokio_util::sync::DropGuard;
 
 use crate::core::InputProvider;
 use crate::core::Monitor;
-use crate::core::MonitorRunner;
 use crate::core::MonitoringSemantics;
+use crate::core::Specification;
 use crate::core::StreamExpr;
 use crate::core::{OutputStream, StreamContext, StreamData, VarName};
 
@@ -37,9 +37,33 @@ impl AsyncVarExchange {
         AsyncVarExchange { senders }
     }
 
-    fn publish(&self, var: &VarName, data: StreamData) {
+    fn publish(
+        &self,
+        var: &VarName,
+        data: StreamData,
+        max_queued: Option<usize>,
+    ) -> Option<StreamData> {
+        // Don't send if maxed_queued limit is set and reached
+        // This check is integrated into publish so that len can
+        // be checked within the same lock acquisition as sending the data
+        // Return None if the data was not sent
+
         let sender = self.senders.get(&var).unwrap();
-        sender.lock().unwrap().send(data).unwrap();
+        {
+            let sender = sender.lock().unwrap();
+
+            if let Some(max_queued) = max_queued {
+                if sender.len() < max_queued {
+                    sender.send(data);
+                    None
+                } else {
+                    Some(data)
+                }
+            } else {
+                sender.send(data);
+                None
+            }
+        }
     }
 }
 
@@ -69,7 +93,7 @@ pub struct AsyncMonitorRunner<T, S, M>
 where
     T: StreamExpr,
     S: MonitoringSemantics<T>,
-    M: Monitor<T>,
+    M: Specification<T>,
 {
     input_streams: Arc<Mutex<BTreeMap<VarName, BoxStream<'static, StreamData>>>>,
     model: M,
@@ -82,7 +106,7 @@ where
     phantom_t: PhantomData<T>,
 }
 
-impl<T: StreamExpr, S: MonitoringSemantics<T>, M: Monitor<T>> MonitorRunner<T, S, M>
+impl<T: StreamExpr, S: MonitoringSemantics<T>, M: Specification<T>> Monitor<T, S, M>
     for AsyncMonitorRunner<T, S, M>
 {
     fn new(model: M, semantics: S, mut input_streams: impl InputProvider) -> Self {
@@ -160,7 +184,7 @@ impl<T: StreamExpr, S: MonitoringSemantics<T>, M: Monitor<T>> MonitorRunner<T, S
     }
 }
 
-impl<T: StreamExpr, S: MonitoringSemantics<T>, M: Monitor<T>> AsyncMonitorRunner<T, S, M> {
+impl<T: StreamExpr, S: MonitoringSemantics<T>, M: Specification<T>> AsyncMonitorRunner<T, S, M> {
     fn spawn_tasks(mut self) -> Self {
         let tasks = self.monitoring_tasks();
 
@@ -182,8 +206,14 @@ impl<T: StreamExpr, S: MonitoringSemantics<T>, M: Monitor<T>> AsyncMonitorRunner
                     _ = cancellation_token.cancelled() => {
                         return;
                     }
-                    Some(data) = input.next() => {
-                        var_exchange.publish(&var, data);
+                    Some(mut data) = input.next() => {
+                        // Try and send the data until the exchange is able to accept it
+                        // We try and receive upto 80/100 input messages
+                        // to avoid monitoring from blocking the input streams
+                        while let Some(unsent_data) = var_exchange.publish(&var, data, Some(80)) {
+                            data = unsent_data;
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        }
                     }
                 }
             }
@@ -204,8 +234,12 @@ impl<T: StreamExpr, S: MonitoringSemantics<T>, M: Monitor<T>> AsyncMonitorRunner
                     _ = cancellation_token.cancelled() => {
                         return;
                     }
-                    Some(data) = output.next() => {
-                        var_exchange.publish(&var, data);
+                    Some(mut data) = output.next() => {
+                        // Try and send the data until the exchange is able to accept it
+                        while let Some(unsent_data) = var_exchange.publish(&var, data, Some(10)) {
+                            data = unsent_data;
+                            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                        }
                     }
                 }
             }

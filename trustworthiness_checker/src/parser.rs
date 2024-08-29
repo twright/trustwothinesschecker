@@ -12,6 +12,12 @@ use winnow::ascii::space0 as whitespace;
 use crate::ast::*;
 use crate::core::{StreamData, VarName};
 
+// This is the top-level parser for LOLA expressions
+pub fn lola_expression(s: &mut &str) -> PResult<SExpr<VarName>> {
+    sexpr.parse_next(s)
+}
+
+// Sub-parsers for the different types of LOLA expressions
 pub fn aexpr(s: &mut &str) -> PResult<SExpr<VarName>> {
     aminus.parse_next(s)
 }
@@ -23,7 +29,7 @@ fn string<'a>(s: &mut &'a str) -> PResult<&'a str> {
 fn streamdata(s: &mut &str) -> PResult<StreamData> {
     delimited(
         whitespace,
-    alt((
+        alt((
             integer.map(StreamData::Int),
             string.map(|s: &str| StreamData::Str(s.into())),
             literal("true").map(|_| StreamData::Bool(true)),
@@ -173,7 +179,9 @@ fn sif(s: &mut &str) -> PResult<SExpr<VarName>> {
 fn sindex(s: &mut &str) -> PResult<SExpr<VarName>> {
     seq!((
         _: whitespace,
+        _: "{",
         sexpr,
+        _: "}",
         _: whitespace,
         _: "[",
         _: whitespace,
@@ -188,22 +196,66 @@ fn sindex(s: &mut &str) -> PResult<SExpr<VarName>> {
     .parse_next(s)
 }
 
-// fn seq(s: &mut &str) -> PResult<SExpr<VarName>> {
-//     return seq!((
-//         _: whitespace,
-//         sexpr,
-//         _: literal(":="),
-//         sexpr,
-//         _: whitespace,
-//     ))
-//     .map(|(a1, a2)| SExpr::SEq(Box::new(a1), Box::new(a2)))
-//     .parse_next(s);
-// }
-
 fn paren_sexpr(s: &mut &str) -> PResult<SExpr<VarName>> {
     delimited('(', sexpr, ')').parse_next(s)
 }
 
-pub fn sexpr(s: &mut &str) -> PResult<SExpr<VarName>> {
+fn sexpr(s: &mut &str) -> PResult<SExpr<VarName>> {
     alt((sif, paren_sexpr, aexpr)).parse_next(s)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_streamdata() {
+        assert_eq!(
+            streamdata(&mut (*"42".to_string()).into()),
+            Ok(StreamData::Int(42)),
+        );
+        assert_eq!(
+            streamdata(&mut (*"\"abc2d\"".to_string()).into()),
+            Ok(StreamData::Str("abc2d".to_string())),
+        );
+        assert_eq!(
+            streamdata(&mut (*"true".to_string()).into()),
+            Ok(StreamData::Bool(true)),
+        );
+        assert_eq!(
+            streamdata(&mut (*"false".to_string()).into()),
+            Ok(StreamData::Bool(false)),
+        );
+    }
+
+    #[test]
+    fn test_sexpr() {
+        assert_eq!(
+            sexpr(&mut (*"1 + 2".to_string()).into()),
+            Ok(SExpr::Plus(
+                Box::new(SExpr::Val(StreamData::Int(1))),
+                Box::new(SExpr::Val(StreamData::Int(2))),
+            )),
+        );
+        assert_eq!(
+            sexpr(&mut (*"1 + 2 * 3".to_string()).into()),
+            Ok(SExpr::Plus(
+                Box::new(SExpr::Val(StreamData::Int(1))),
+                Box::new(SExpr::Mult(
+                    Box::new(SExpr::Val(StreamData::Int(2))),
+                    Box::new(SExpr::Val(StreamData::Int(3))),
+                )),
+            )),
+        );
+        assert_eq!(
+            sexpr(&mut (*"x + (y + 2)".to_string()).into()),
+            Ok(SExpr::Plus(
+                Box::new(SExpr::Var(VarName("x".into()))),
+                Box::new(SExpr::Plus(
+                    Box::new(SExpr::Var(VarName("y".into()))),
+                    Box::new(SExpr::Val(StreamData::Int(2))),
+                )),
+            )),
+        )
+    }
 }

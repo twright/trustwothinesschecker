@@ -70,7 +70,7 @@ pub trait MonitoringSemantics<T>: Clone + Send + 'static {
     fn to_async_stream(&self, expr: T, ctx: &impl StreamContext) -> OutputStream;
 }
 
-pub trait Monitor<T: StreamExpr> {
+pub trait Specification<T: StreamExpr> {
     fn input_vars(&self) -> Vec<VarName>;
 
     fn output_vars(&self) -> Vec<VarName>;
@@ -78,11 +78,11 @@ pub trait Monitor<T: StreamExpr> {
     fn var_expr(&self, var: &VarName) -> Option<T>;
 }
 
-pub trait MonitorRunner<T, S, M>
+pub trait Monitor<T, S, M>
 where
     T: StreamExpr,
     S: MonitoringSemantics<T>,
-    M: Monitor<T>,
+    M: Specification<T>,
 {
     fn new(model: M, semantics: S, input: impl InputProvider) -> Self;
 
